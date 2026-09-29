@@ -53,6 +53,13 @@ export interface Building {
 }
 
 // ──────────────── Room ────────────────────────────────────────
+/** Posición en metros dentro del mapa MultiSet (mismo espacio que la escena de Mattercraft). */
+export interface ArPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface Room {
   id?: string;
   roomId: string;
@@ -60,7 +67,34 @@ export interface Room {
   category: string;
   stateId: string;
   modelUrl?: string;
+  arPosition?: ArPoint | null;
   active: boolean;
+}
+
+// ──────────────── MultiSet ─────────────────────────────────────
+export interface MapMesh {
+  name: string;
+  url: string;
+  position: { x: number; y: number; z: number };
+  rotation: { qx: number; qy: number; qz: number; qw: number };
+}
+
+// ──────────────── Navegación (navmesh) ─────────────────────────
+/** Enlace entre dos zonas del navmesh sin suelo continuo (escaleras). */
+export interface NavConnection {
+  id?: string;
+  label: string;
+  group?: string;
+  start: ArPoint;
+  end: ArPoint;
+  radius: number;
+  bidirectional: boolean;
+}
+
+export interface NavMeshInfo {
+  updatedAt: string;
+  updatedBy: string;
+  sizeBytes: number;
 }
 
 // ──────────────── PoiClip ─────────────────────────────────────

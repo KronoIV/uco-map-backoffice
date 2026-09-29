@@ -11,6 +11,7 @@ import SettingsPage from '../pages/SettingsPage';
 import DeviceSessionsPage from '../pages/device-sessions/DeviceSessionsPage';
 import CampusPage from '../pages/CampusPage';
 import UsersPage from '../pages/users/UsersPage';
+import PoiEditorPage from '../pages/PoiEditorPage';
 import NotFoundPage from '../pages/NotFoundPage';
 
 const router = createBrowserRouter([
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
           { path: 'map', element: <MapPage /> },
           { path: 'nodes', element: <NodesPage /> },
           { path: 'campus', element: <CampusPage /> },
+          { path: 'ar-points', element: <PoiEditorPage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'sessions', element: <DeviceSessionsPage /> },
           { path: 'users', element: <UsersPage /> },

@@ -193,6 +193,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
       category: formData.category,
       stateId: formData.stateId,
       modelUrl: formData.modelUrl || undefined,
+      arPosition: room?.arPosition ?? null,
       active: true,
     };
     if (isEdit) { updateMutation.mutate({ id: room!.roomId, data: payload }); }

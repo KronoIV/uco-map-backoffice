@@ -1,0 +1,386 @@
+[
+  {
+    "label": "NavigationConnection 2",
+    "group": "COLEGIO",
+    "start": [
+      -37.0924,
+      -3.5684,
+      -10.0635
+    ],
+    "end": [
+      -38.1791,
+      -2.8121,
+      -11.8126
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 3",
+    "group": "COLEGIO",
+    "start": [
+      3.2457,
+      -5.4709,
+      -30.7717
+    ],
+    "end": [
+      3.7665,
+      -4.8202,
+      -29.4547
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 17",
+    "group": "COLEGIO",
+    "start": [
+      1.8271,
+      -2.877,
+      -30.2102
+    ],
+    "end": [
+      1.6294,
+      -2.7594,
+      -30.7266
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 18",
+    "group": "COLEGIO",
+    "start": [
+      3.8523,
+      -4.2173,
+      -27.222
+    ],
+    "end": [
+      4.1853,
+      -4.5185,
+      -28.6617
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 19",
+    "group": "COLEGIO",
+    "start": [
+      2.1217,
+      -2.7158,
+      -31.9315
+    ],
+    "end": [
+      0.5826,
+      -2.6998,
+      -31.2512
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 4",
+    "group": "EDC",
+    "start": [
+      19.805,
+      -1.4065,
+      -4.2374
+    ],
+    "end": [
+      19.5769,
+      -1.2825,
+      -6.1235
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 5",
+    "group": "EDC",
+    "start": [
+      47.4476,
+      -5.2016,
+      -10.4682
+    ],
+    "end": [
+      47.9808,
+      -5.2143,
+      -9.1863
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 6",
+    "group": "EDC",
+    "start": [
+      14.1185,
+      -1.4715,
+      -2.8073
+    ],
+    "end": [
+      12.6692,
+      -1.4904,
+      -2.5162
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 7",
+    "group": "EDC",
+    "start": [
+      -0.0795,
+      -1.3901,
+      0.5949
+    ],
+    "end": [
+      1.2081,
+      -1.3992,
+      0.2329
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 8",
+    "group": "EDC",
+    "start": [
+      4.4431,
+      -1.445,
+      -0.6314
+    ],
+    "end": [
+      7.3254,
+      -1.4927,
+      -1.1497
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 9",
+    "group": "EDC",
+    "start": [
+      21.8005,
+      -1.499,
+      -3.0795
+    ],
+    "end": [
+      19.99,
+      -1.3486,
+      -4.0737
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 10",
+    "group": "EDC",
+    "start": [
+      24.4514,
+      -3.3554,
+      -7.5066
+    ],
+    "end": [
+      23.8003,
+      -3.4275,
+      -7.3924
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 11",
+    "group": "EDC",
+    "start": [
+      23.7676,
+      -1.4065,
+      -5.2662
+    ],
+    "end": [
+      25.8782,
+      -1.4066,
+      -5.8068
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 12",
+    "group": "EDC",
+    "start": [
+      24.1785,
+      -3.3059,
+      -8.7618
+    ],
+    "end": [
+      24.5436,
+      -3.3594,
+      -7.5566
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 13",
+    "group": "EDC",
+    "start": [
+      -1.4996,
+      -1.4076,
+      2.4584
+    ],
+    "end": [
+      -0.0958,
+      -1.4168,
+      1.0855
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 14",
+    "group": "EDC",
+    "start": [
+      -0.0958,
+      -5.2018,
+      2.6763
+    ],
+    "end": [
+      -0.253,
+      -5.2133,
+      1.4832
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 15",
+    "group": "EDC",
+    "start": [
+      38.8616,
+      -1.4111,
+      -8.8274
+    ],
+    "end": [
+      40.1128,
+      -1.379,
+      -9.1871
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 16",
+    "group": "EDC",
+    "start": [
+      38.8616,
+      -1.4111,
+      -8.8274
+    ],
+    "end": [
+      39.8064,
+      -1.379,
+      -7.5455
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 23",
+    "group": "EDC",
+    "start": [
+      14.3412,
+      -1.4652,
+      -2.8291
+    ],
+    "end": [
+      15.7216,
+      -1.4101,
+      -3.0917
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 24",
+    "group": "EDC",
+    "start": [
+      0.1512,
+      -1.4076,
+      2.0855
+    ],
+    "end": [
+      -0.0958,
+      -1.4168,
+      1.0855
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 25",
+    "group": "EDC",
+    "start": [
+      20.1401,
+      -1.4065,
+      -4.3513
+    ],
+    "end": [
+      22.2507,
+      -1.3486,
+      -4.892
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 20",
+    "group": "M",
+    "start": [
+      0.3945,
+      -1.7954,
+      56.4809
+    ],
+    "end": [
+      -0.5621,
+      -1.7711,
+      54.5073
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 21",
+    "group": "M",
+    "start": [
+      -17.7197,
+      -1.8948,
+      33.8777
+    ],
+    "end": [
+      -16.2377,
+      -1.8948,
+      31.8978
+    ],
+    "radius": 1,
+    "bidirectional": true
+  },
+  {
+    "label": "NavigationConnection 22",
+    "group": "M",
+    "start": [
+      -18.9544,
+      -1.8948,
+      33.7565
+    ],
+    "end": [
+      -17.4833,
+      -1.985,
+      30.7902
+    ],
+    "radius": 1,
+    "bidirectional": true
+  }
+]

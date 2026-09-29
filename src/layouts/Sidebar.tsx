@@ -21,6 +21,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
 import { useAuth } from '../context/AuthContext';
 
 const SIDEBAR_EXPANDED = 230;
@@ -31,6 +32,7 @@ const navItems = [
   { label: 'Mapa', icon: <MapRoundedIcon fontSize="small" />, path: '/map' },
   { label: 'Navegación', icon: <PlaceRoundedIcon fontSize="small" />, path: '/nodes' },
   { label: 'Campus', icon: <ApartmentRoundedIcon fontSize="small" />, path: '/campus' },
+  { label: 'Puntos AR', icon: <ViewInArRoundedIcon fontSize="small" />, path: '/ar-points' },
   { label: 'Sesiones', icon: <InsightsRoundedIcon fontSize="small" />, path: '/sessions' },
   { label: 'Usuarios', icon: <PeopleRoundedIcon fontSize="small" />, path: '/users' },
 ];

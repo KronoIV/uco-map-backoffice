@@ -71,6 +71,7 @@ function RoomFormDialog({ open, onClose, room }: {
       category: formData.category,
       stateId: formData.stateId,
       modelUrl: formData.modelUrl || undefined,
+      arPosition: room?.arPosition ?? null,
       active: true,
     };
     if (isEdit) {

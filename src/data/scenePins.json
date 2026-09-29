@@ -1,0 +1,483 @@
+[
+  {
+    "label": "Box 36",
+    "building": "EDC",
+    "floor": "Primer Piso",
+    "position": [
+      21.097,
+      -8.1204,
+      -0.9718
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 37",
+    "building": "EDC",
+    "floor": "Primer Piso",
+    "position": [
+      -0.3877,
+      -8.1204,
+      1.6505
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 38",
+    "building": "EDC",
+    "floor": "Primer Piso",
+    "position": [
+      8.9443,
+      -8.1204,
+      -0.6221
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 39",
+    "building": "EDC",
+    "floor": "Primer Piso",
+    "position": [
+      19.684,
+      -8.1204,
+      -1.8194
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 40",
+    "building": "EDC",
+    "floor": "Primer Piso",
+    "position": [
+      20.2883,
+      -8.1204,
+      -0.7094
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 25",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      0.4371,
+      -4.1434,
+      5.5375
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 26",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      -0.6432,
+      -4.1434,
+      3.6803
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 27",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      8.5267,
+      -4.1434,
+      3.57
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 29",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      8.9727,
+      -4.1434,
+      -0.4385
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 30",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      20.6737,
+      -4.1434,
+      -0.8297
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 31",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      19.6996,
+      -4.1434,
+      -1.8112
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 33",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      32.2464,
+      -4.1434,
+      -6.0127
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 34",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      38.3198,
+      -4.1434,
+      -7.4285
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Box 35",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      39.902,
+      -4.1434,
+      -7.5895
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Laboratorio Fisica",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      24.2896,
+      -4.1434,
+      -4.3542
+    ],
+    "stateIds": [
+      "Laboratorio_Fisica"
+    ]
+  },
+  {
+    "label": "Laboratorio de Computo L2",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      7.3231,
+      -4.1434,
+      1.9647
+    ],
+    "stateIds": [
+      "L2"
+    ]
+  },
+  {
+    "label": "Telecomunicaciones",
+    "building": "EDC",
+    "floor": "Segundo Piso",
+    "position": [
+      47.7469,
+      -4.1434,
+      -9.8947
+    ],
+    "stateIds": [
+      "Telecomunicaciones"
+    ]
+  },
+  {
+    "label": "Biotecnologia 2",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      7.528,
+      -0.2631,
+      -0.2794
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Direccion de investigacion y desarrollo",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      20.1434,
+      -0.2631,
+      -2.7828
+    ],
+    "stateIds": [
+      "Direccion_deinvestigacion"
+    ]
+  },
+  {
+    "label": "EDC",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      0,
+      -0.2631,
+      2.6285
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Laboratioro Limnologia",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      33.9789,
+      -0.2631,
+      -6.7587
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Laboratorio Biologia Molecular 2",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      39.5266,
+      -0.2631,
+      -7.9767
+    ],
+    "stateIds": [
+      "Laboratorio_BiologiaMolecular2"
+    ]
+  },
+  {
+    "label": "Laboratorio Biotecnologia",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      39.7238,
+      -0.2631,
+      -9.1059
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Laboratorio Redes",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      -0.7047,
+      -0.2631,
+      1.58
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "Laboratorio Sanidad Vegetal",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      30.5272,
+      -0.2631,
+      -5.9589
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "oratorio",
+    "building": "EDC",
+    "floor": "Tercer Piso",
+    "position": [
+      21.3872,
+      -0.2631,
+      -3.3395
+    ],
+    "stateIds": [
+      "Capilla"
+    ]
+  },
+  {
+    "label": "CAJA",
+    "building": "M",
+    "floor": "Primer Piso",
+    "position": [
+      -14.796,
+      -1.1721,
+      30.3729
+    ],
+    "stateIds": [
+      "CAJA"
+    ]
+  },
+  {
+    "label": "co101",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      1.8147,
+      -5.6043,
+      -33.191
+    ],
+    "stateIds": [
+      "co101"
+    ]
+  },
+  {
+    "label": "co102",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      -5.5594,
+      -5.4919,
+      -29.6766
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "co103",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      -12.2894,
+      -5.4919,
+      -26.395
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "co104",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      -19.0932,
+      -5.4919,
+      -23.0774
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "co105",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      -26.7959,
+      -5.4919,
+      -19.3216
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "co106",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      -32.8635,
+      -5.4919,
+      -16.363
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "co107",
+    "building": "colegio",
+    "floor": "Primer Piso",
+    "position": [
+      -41.5598,
+      -5.4919,
+      -12.1227
+    ],
+    "stateIds": []
+  },
+  {
+    "label": "co201",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      1.8147,
+      -2.3719,
+      -33.191
+    ],
+    "stateIds": [
+      "co201"
+    ]
+  },
+  {
+    "label": "co202",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      -4.262,
+      -2.3897,
+      -30.3092
+    ],
+    "stateIds": [
+      "co202"
+    ]
+  },
+  {
+    "label": "co203",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      -10.1072,
+      -2.3897,
+      -27.5571
+    ],
+    "stateIds": [
+      "co203"
+    ]
+  },
+  {
+    "label": "co204",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      -15.9429,
+      -2.3897,
+      -24.7787
+    ],
+    "stateIds": [
+      "co204"
+    ]
+  },
+  {
+    "label": "co205",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      -21.8164,
+      -2.3897,
+      -21.985
+    ],
+    "stateIds": [
+      "co205"
+    ]
+  },
+  {
+    "label": "co206",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      -27.9227,
+      -2.3357,
+      -19.1443
+    ],
+    "stateIds": [
+      "co206"
+    ]
+  },
+  {
+    "label": "co207",
+    "building": "colegio",
+    "floor": "Segundo Piso",
+    "position": [
+      -33.6758,
+      -2.2312,
+      -16.3213
+    ],
+    "stateIds": [
+      "co207"
+    ]
+  }
+]

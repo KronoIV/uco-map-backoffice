@@ -31,8 +31,6 @@ export default function LoginPage() {
     const { login, user } = useAuth();
     const navigate = useNavigate();
 
-    if (user) return <Navigate to="/" replace />;
-
     const [showPassword, setShowPassword] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
 
@@ -41,6 +39,8 @@ export default function LoginPage() {
         handleSubmit,
         formState: { errors, isSubmitting },
     } = useForm<FormValues>({ mode: 'onBlur' });
+
+    if (user) return <Navigate to="/" replace />;
 
     const onSubmit = async ({ email, password }: FormValues) => {
         setServerError(null);
