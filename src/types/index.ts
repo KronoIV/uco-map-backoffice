@@ -136,6 +136,34 @@ export interface SessionStats {
   byPlatform: Record<string, number>;
 }
 
+// ──────────────── NavigationTrip ──────────────────────────────
+export type TripStatus = 'IN_PROGRESS' | 'ARRIVED' | 'ABANDONED';
+
+export interface NavigationTrip {
+  id: string;
+  tripId: string;
+  deviceId: string;
+  platform?: string;
+  roomId?: string;
+  roomName: string;
+  building?: string;
+  startMode?: 'indoor' | 'outdoor' | 'ask';
+  startDistanceM?: number;
+  startAccuracyM?: number;
+  status: TripStatus;
+  endReason?: string;
+  startedAt: string; // ISO-8601
+  endedAt?: string;
+  durationMs?: number;
+  buildingReachedMs?: number;
+  localizedMs?: number;
+  outdoorRouteM?: number;
+  indoorRouteM?: number;
+  modeSwitches?: number;
+  vpsFailures?: number;
+  usedAR?: boolean;
+}
+
 // ──────────────── AppSetting (Feature Flags) ────────────────
 export type SettingType = 'BOOLEAN' | 'STRING' | 'NUMBER' | 'JSON';
 

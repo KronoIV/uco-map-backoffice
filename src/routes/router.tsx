@@ -9,6 +9,7 @@ import MapPage from '../pages/MapPage';
 import NodesPage from '../pages/NodesPage';
 import SettingsPage from '../pages/SettingsPage';
 import DeviceSessionsPage from '../pages/device-sessions/DeviceSessionsPage';
+import TripsPage from '../pages/TripsPage';
 import CampusPage from '../pages/CampusPage';
 import UsersPage from '../pages/users/UsersPage';
 import PoiEditorPage from '../pages/PoiEditorPage';
@@ -35,6 +36,7 @@ const router = createBrowserRouter([
           { path: 'ar-points', element: <PoiEditorPage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'sessions', element: <DeviceSessionsPage /> },
+          { path: 'trips', element: <TripsPage /> },
           { path: 'users', element: <UsersPage /> },
         ],
       },
