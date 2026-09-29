@@ -154,6 +154,7 @@ export interface NavigationTrip {
   endReason?: string;
   startedAt: string; // ISO-8601
   endedAt?: string;
+  lastSeenAt?: string;
   durationMs?: number;
   buildingReachedMs?: number;
   localizedMs?: number;

@@ -28,7 +28,7 @@ const END_REASON_LABEL: Record<string, string> = {
   closed: 'Cerró la navegación',
   'destination-changed': 'Cambió de destino',
   'page-closed': 'Cerró la app',
-  timeout: 'Sin cierre (expirado)',
+  timeout: 'Salió de la app sin cerrar',
 };
 
 const cardSx = {
