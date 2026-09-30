@@ -1,15 +1,28 @@
 import { useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deviceSessionService } from '../services/deviceSessionService';
+import type { SessionQuery } from '../services/deviceSessionService';
 import { getStoredToken } from '../services/authService';
-import type { DeviceSession, SessionStats } from '../types';
+import type { DeviceSession, PageResponse, SessionStats } from '../types';
 
 const SSE_URL = `${import.meta.env.VITE_BACKEND_URL}/api/sessions/stream`;
+const RECENT_SIZE = 6;
 
-export function useDeviceSessions() {
+export function useDeviceSessions(query: SessionQuery) {
   return useQuery({
-    queryKey: ['device-sessions'],
-    queryFn: deviceSessionService.getAll,
+    queryKey: ['device-sessions', 'page', query],
+    queryFn: () => deviceSessionService.getPage(query),
+    placeholderData: keepPreviousData,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Últimos dispositivos con actividad (panel "Actividad reciente"). */
+export function useRecentSessions() {
+  return useQuery({
+    queryKey: ['device-sessions', 'recent'],
+    queryFn: () => deviceSessionService.getPage({ page: 0, size: RECENT_SIZE }).then(p => p.content),
     retry: false,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -70,7 +83,7 @@ function connectFetchSSE(
 
 /**
  * Opens a long-lived SSE connection to /api/sessions/stream.
- * On each "session" event: upserts the session in the React Query cache.
+ * On each "session" event: updates that device in the loaded pages and in the recent list.
  * On each "stats" event: replaces the stats cache entry.
  * Reconnects automatically if the connection drops.
  */
@@ -90,14 +103,20 @@ export function useSessionStream() {
         (eventName, data) => {
           if (eventName === 'session') {
             const updated: DeviceSession = JSON.parse(data);
-            queryClient.setQueryData<DeviceSession[]>(['device-sessions'], prev => {
-              if (!prev) return [updated];
-              const idx = prev.findIndex(s => s.id === updated.id);
-              if (idx === -1) return [updated, ...prev];
-              const next = [...prev];
-              next[idx] = updated;
-              return next;
-            });
+            queryClient.setQueriesData<PageResponse<DeviceSession>>(
+              { queryKey: ['device-sessions', 'page'] },
+              prev => {
+                if (!prev) return prev;
+                const idx = prev.content.findIndex(s => s.id === updated.id);
+                if (idx === -1) return prev;
+                const content = [...prev.content];
+                content[idx] = updated;
+                return { ...prev, content };
+              },
+            );
+            queryClient.setQueryData<DeviceSession[]>(['device-sessions', 'recent'], prev =>
+              prev ? [updated, ...prev.filter(s => s.id !== updated.id)].slice(0, RECENT_SIZE) : prev,
+            );
           } else if (eventName === 'stats') {
             const stats: SessionStats = JSON.parse(data);
             queryClient.setQueryData(['session-stats'], stats);

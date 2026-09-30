@@ -18,7 +18,7 @@ const routeMap: Record<string, string[]> = {
   '/nodes/new': ['Navegación', 'Nuevo'],
   '/campus': ['Campus'],
   '/settings': ['Configuración'],
-  '/sessions': ['Sesiones'],
+  '/sessions': ['Actividad'],
   '/users': ['Usuarios'],
 };
 

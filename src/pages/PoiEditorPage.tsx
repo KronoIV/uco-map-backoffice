@@ -8,7 +8,6 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
-import PageHeader from '../components/PageHeader';
 import MapViewer, { type MapViewerApi, type ViewerMarker } from '../components/poi-editor/MapViewer';
 import NavigationPanel from '../components/poi-editor/NavigationPanel';
 import { useNavigationEditor } from '../components/poi-editor/useNavigationEditor';
@@ -153,18 +152,16 @@ export default function PoiEditorPage() {
   const loading = Object.entries(progress);
 
   return (
-    <Box>
-      <PageHeader
-        title="Puntos AR"
-        subtitle="Ubica los destinos de cada salón y las escaleras sobre el escaneo 3D de MultiSet, y regenera el navmesh sin usar Mattercraft."
-        action={importable.length > 0 && (
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {importable.length > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}>
           <Tooltip title="Copia la posición de los pines que ya existían en Mattercraft a los salones que aún no tienen punto">
-            <Button variant="outlined" startIcon={<HistoryRoundedIcon />} disabled={importMut.isPending} onClick={() => importMut.mutate()}>
+            <Button size="small" variant="outlined" startIcon={<HistoryRoundedIcon />} disabled={importMut.isPending} onClick={() => importMut.mutate()}>
               Importar de Mattercraft ({importable.length})
             </Button>
           </Tooltip>
-        )}
-      />
+        </Box>
+      )}
 
       {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
       {meshesQ.isError && (
@@ -173,7 +170,7 @@ export default function PoiEditorPage() {
         </Alert>
       )}
 
-      <Box sx={{ display: 'flex', gap: 2, height: 'calc(100vh - 190px)', minHeight: 520 }}>
+      <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
         {/* ── Panel de salones ─────────────────────────────────────── */}
         <Paper sx={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}>

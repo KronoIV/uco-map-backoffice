@@ -1,26 +1,20 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Box, Chip, Grid, IconButton, MenuItem, Paper, Skeleton, Table, TableBody, TableCell,
+  Box, Button, Chip, Grid, IconButton, MenuItem, Paper, Skeleton, Table, TableBody, TableCell,
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
-import {
-  DataGrid,
-  GridToolbarContainer,
-  GridToolbarExport,
-  GridToolbarFilterButton,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid';
-import type { GridColDef } from '@mui/x-data-grid';
+import { DataGrid } from '@mui/x-data-grid';
+import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import TimerRoundedIcon from '@mui/icons-material/TimerRounded';
 import GpsFixedRoundedIcon from '@mui/icons-material/GpsFixedRounded';
-import PageHeader from '../components/PageHeader';
 import StatCard from '../components/StatCard';
 import { tripService } from '../services/tripService';
-import type { NavigationTrip } from '../types';
+import type { NavigationTrip, TripFilters } from '../types';
 
 const END_REASON_LABEL: Record<string, string> = {
   'ar-arrival': 'Llegó (AR)',
@@ -56,43 +50,8 @@ function fmtDate(iso?: string) {
   });
 }
 
-function mean(values: number[]) {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-}
-
-function median(values: number[]) {
-  if (!values.length) return null;
-  const s = [...values].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
 function pct(part: number, total: number) {
   return total > 0 ? `${Math.round((part / total) * 100)}%` : '—';
-}
-
-interface Summary {
-  total: number;
-  finished: number;
-  arrived: number;
-  inProgress: number;
-  arrivedDurations: number[];
-  localized: number[];
-  vpsFailures: number[];
-}
-
-function summarize(trips: NavigationTrip[]): Summary {
-  const finished = trips.filter(t => t.status !== 'IN_PROGRESS');
-  const arrived = finished.filter(t => t.status === 'ARRIVED');
-  return {
-    total: trips.length,
-    finished: finished.length,
-    arrived: arrived.length,
-    inProgress: trips.length - finished.length,
-    arrivedDurations: arrived.map(t => t.durationMs).filter((v): v is number => v != null),
-    localized: finished.map(t => t.localizedMs).filter((v): v is number => v != null),
-    vpsFailures: finished.filter(t => t.usedAR).map(t => t.vpsFailures ?? 0),
-  };
 }
 
 function statusChip(trip: NavigationTrip) {
@@ -148,97 +107,94 @@ const columns: GridColDef<NavigationTrip>[] = [
   { field: 'deviceId', headerName: 'Dispositivo', width: 120 },
 ];
 
-function Toolbar() {
-  return (
-    <GridToolbarContainer sx={{ px: 2, py: 1, borderBottom: '1px solid #F1F1F1', justifyContent: 'space-between' }}>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <GridToolbarFilterButton />
-        <GridToolbarExport csvOptions={{ fileName: 'recorridos-ucomap', utf8WithBom: true }} />
-      </Box>
-      <GridToolbarQuickFilter />
-    </GridToolbarContainer>
-  );
+function toFilters(from: string, to: string, building: string): TripFilters {
+  return {
+    // Las fechas del selector son locales: el día completo en la zona horaria del navegador
+    from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
+    to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
+    building: building === 'all' ? undefined : building,
+  };
 }
 
 export default function TripsPage() {
-  const { data: trips, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['navigation-trips'],
-    queryFn: tripService.getAll,
-    refetchOnWindowFocus: false,
-  });
-
+  const queryClient = useQueryClient();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [building, setBuilding] = useState('all');
+  const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 25 });
+  const [exporting, setExporting] = useState(false);
 
-  const buildings = useMemo(
-    () => [...new Set((trips ?? []).map(t => t.building).filter((b): b is string => !!b))].sort(),
-    [trips],
-  );
+  const filters = useMemo(() => toFilters(from, to, building), [from, to, building]);
 
-  const filtered = useMemo(() => {
-    const fromTs = from ? new Date(`${from}T00:00:00`).getTime() : -Infinity;
-    const toTs = to ? new Date(`${to}T23:59:59.999`).getTime() : Infinity;
-    return (trips ?? []).filter(t => {
-      const ts = new Date(t.startedAt).getTime();
-      return ts >= fromTs && ts <= toTs && (building === 'all' || t.building === building);
-    });
-  }, [trips, from, to, building]);
+  const { data: tripPage, isLoading: loadingPage, isFetching: fetchingPage } = useQuery({
+    queryKey: ['navigation-trips', 'page', filters, pagination.page, pagination.pageSize],
+    queryFn: () => tripService.getPage(filters, pagination.page, pagination.pageSize),
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
 
-  const summary = useMemo(() => summarize(filtered), [filtered]);
+  const { data: summary, isLoading: loadingSummary, isFetching: fetchingSummary } = useQuery({
+    queryKey: ['navigation-trips', 'summary', filters],
+    queryFn: () => tripService.getSummary(filters),
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
 
-  const byDestination = useMemo(() => {
-    const groups = new Map<string, NavigationTrip[]>();
-    for (const t of filtered) {
-      const key = `${t.building ?? '—'} · ${t.roomName}`;
-      groups.set(key, [...(groups.get(key) ?? []), t]);
+  // Al cambiar un filtro se vuelve a la primera página
+  const withFirstPage = <T,>(setter: (v: T) => void) => (v: T) => {
+    setter(v);
+    setPagination(p => ({ ...p, page: 0 }));
+  };
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['navigation-trips'] });
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const blob = await tripService.exportCsv(filters);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'recorridos-ucomap.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
     }
-    return [...groups.entries()]
-      .map(([key, list]) => ({ key, s: summarize(list) }))
-      .sort((a, b) => b.s.total - a.s.total);
-  }, [filtered]);
+  };
 
-  const abandonReasons = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const t of filtered) {
-      if (t.status !== 'ABANDONED') continue;
-      const r = t.endReason ?? 'closed';
-      counts.set(r, (counts.get(r) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [filtered]);
-
-  const avgArrival = mean(summary.arrivedDurations);
-  const medArrival = median(summary.arrivedDurations);
-  const avgLocalized = mean(summary.localized);
-  const avgFailures = mean(summary.vpsFailures);
+  const buildings = summary?.buildings ?? [];
+  const byDestination = summary?.byDestination ?? [];
+  const abandonReasons = summary?.abandonReasons ?? [];
 
   const cards = [
     {
       title: 'Recorridos',
-      value: summary.total,
-      subtitle: `${summary.finished} terminados · ${summary.inProgress} en curso`,
+      value: summary?.total ?? 0,
+      subtitle: `${summary?.finished ?? 0} terminados · ${summary?.inProgress ?? 0} en curso`,
       icon: <RouteRoundedIcon />,
       color: '#6366F1',
     },
     {
       title: 'Tasa de éxito',
-      value: pct(summary.arrived, summary.finished),
-      subtitle: `${summary.arrived} de ${summary.finished} llegaron al destino`,
+      value: pct(summary?.arrived ?? 0, summary?.finished ?? 0),
+      subtitle: `${summary?.arrived ?? 0} de ${summary?.finished ?? 0} llegaron al destino`,
       icon: <CheckCircleRoundedIcon />,
       color: '#00d084',
     },
     {
       title: 'Tiempo de llegada',
-      value: fmtDuration(avgArrival),
-      subtitle: `Promedio · mediana ${fmtDuration(medArrival)}`,
+      value: fmtDuration(summary?.avgArrivalMs),
+      subtitle: `Promedio · mediana ${fmtDuration(summary?.medianArrivalMs)}`,
       icon: <TimerRoundedIcon />,
       color: '#F59E0B',
     },
     {
       title: 'Ubicación VPS',
-      value: fmtDuration(avgLocalized),
-      subtitle: avgFailures == null ? 'Sin sesiones AR' : `Promedio · ${avgFailures.toFixed(1)} fallos por recorrido AR`,
+      value: fmtDuration(summary?.avgLocalizedMs),
+      subtitle: summary?.avgVpsFailures == null
+        ? 'Sin sesiones AR'
+        : `Promedio · ${summary.avgVpsFailures.toFixed(1)} fallos por recorrido AR`,
       icon: <GpsFixedRoundedIcon />,
       color: '#3B82F6',
     },
@@ -246,47 +202,51 @@ export default function TripsPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="Recorridos"
-        subtitle="Tiempo de orientación y tasa de llegada al destino"
-        action={
-          <Tooltip title="Refrescar">
-            <IconButton
-              size="small"
-              onClick={() => refetch()}
-              disabled={isFetching}
-              sx={{ border: '1px solid #E5E7EB', borderRadius: '8px', color: 'text.secondary' }}
-            >
-              <RefreshRoundedIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-        }
-      />
-
-      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
         <TextField
           label="Desde" type="date" size="small" value={from}
-          onChange={e => setFrom(e.target.value)}
+          onChange={e => withFirstPage(setFrom)(e.target.value)}
           slotProps={{ inputLabel: { shrink: true } }}
         />
         <TextField
           label="Hasta" type="date" size="small" value={to}
-          onChange={e => setTo(e.target.value)}
+          onChange={e => withFirstPage(setTo)(e.target.value)}
           slotProps={{ inputLabel: { shrink: true } }}
         />
         <TextField
           select label="Edificio" size="small" value={building}
-          onChange={e => setBuilding(e.target.value)} sx={{ minWidth: 160 }}
+          onChange={e => withFirstPage(setBuilding)(e.target.value)} sx={{ minWidth: 160 }}
         >
           <MenuItem value="all">Todos</MenuItem>
           {buildings.map(b => <MenuItem key={b} value={b}>{b}</MenuItem>)}
         </TextField>
+        <Box sx={{ ml: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Button
+            size="small" variant="outlined" startIcon={<DownloadRoundedIcon />}
+            onClick={exportCsv} disabled={exporting}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}
+          >
+            {exporting ? 'Exportando…' : 'Exportar CSV'}
+          </Button>
+          <Tooltip title="Refrescar">
+            <Box component="span">
+              <IconButton
+                size="small"
+                onClick={refresh}
+                disabled={fetchingPage || fetchingSummary}
+                sx={{ border: '1px solid #E5E7EB', borderRadius: '8px', color: 'text.secondary' }}
+              >
+                <RefreshRoundedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+          </Tooltip>
+        </Box>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
         {cards.map(card => (
           <Grid key={card.title} size={{ xs: 12, sm: 6, lg: 3 }}>
-            {isLoading
+            {loadingSummary
               ? <Skeleton variant="rounded" height={110} sx={{ borderRadius: '18px' }} />
               : <StatCard {...card} />}
           </Grid>
@@ -311,13 +271,13 @@ export default function TripsPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {byDestination.map(({ key, s }) => (
-                    <TableRow key={key}>
-                      <TableCell>{key}</TableCell>
-                      <TableCell align="right">{s.total}</TableCell>
-                      <TableCell align="right">{pct(s.arrived, s.finished)}</TableCell>
-                      <TableCell align="right">{fmtDuration(mean(s.arrivedDurations))}</TableCell>
-                      <TableCell align="right">{fmtDuration(median(s.arrivedDurations))}</TableCell>
+                  {byDestination.map(d => (
+                    <TableRow key={`${d.building}|${d.roomName}`}>
+                      <TableCell>{`${d.building ?? '—'} · ${d.roomName}`}</TableCell>
+                      <TableCell align="right">{d.total}</TableCell>
+                      <TableCell align="right">{pct(d.arrived, d.finished)}</TableCell>
+                      <TableCell align="right">{fmtDuration(d.avgArrivalMs)}</TableCell>
+                      <TableCell align="right">{fmtDuration(d.medianArrivalMs)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -330,7 +290,7 @@ export default function TripsPage() {
             <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 2 }}>Motivos de abandono</Typography>
             {abandonReasons.length === 0 ? (
               <Typography variant="body2" color="text.secondary">Sin abandonos</Typography>
-            ) : abandonReasons.map(([reason, count]) => (
+            ) : abandonReasons.map(({ reason, count }) => (
               <Box key={reason} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography sx={{ fontSize: '0.85rem' }}>{END_REASON_LABEL[reason] ?? reason}</Typography>
                 <Chip label={count} size="small" sx={{ fontWeight: 700 }} />
@@ -342,17 +302,17 @@ export default function TripsPage() {
 
       <Box sx={{ ...cardSx, overflow: 'hidden', height: 520 }}>
         <DataGrid
-          rows={filtered}
+          rows={tripPage?.content ?? []}
           columns={columns}
-          loading={isLoading}
+          loading={loadingPage || fetchingPage}
           getRowId={row => row.id}
-          slots={{ toolbar: Toolbar }}
-          showToolbar
+          paginationMode="server"
+          rowCount={tripPage?.totalElements ?? 0}
+          paginationModel={pagination}
+          onPaginationModelChange={setPagination}
           pageSizeOptions={[25, 50, 100]}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 25 } },
-            sorting: { sortModel: [{ field: 'startedAt', sort: 'desc' }] },
-          }}
+          disableColumnSorting
+          disableColumnFilter
           disableRowSelectionOnClick
           sx={{ border: 'none' }}
         />

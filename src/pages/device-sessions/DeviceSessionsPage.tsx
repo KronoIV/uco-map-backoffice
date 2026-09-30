@@ -1,108 +1,72 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box, Grid, Paper, Typography, Chip, InputAdornment,
   OutlinedInput, ToggleButton, ToggleButtonGroup, Skeleton,
 } from '@mui/material';
+import type { GridPaginationModel } from '@mui/x-data-grid';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
-import PageHeader from '../../components/PageHeader';
 import SessionStatCards, { PlatformDistribution } from '../../components/device-sessions/SessionStatCards';
 import SessionsDataGrid from '../../components/device-sessions/SessionsDataGrid';
 import SessionDetailDrawer from '../../components/device-sessions/SessionDetailDrawer';
-import { useDeviceSessions, useSessionStats, useSessionStream } from '../../hooks/useDeviceSessions';
-import type { DeviceSession } from '../../types';
+import {
+  useDeviceSessions, useRecentSessions, useSessionStats, useSessionStream,
+} from '../../hooks/useDeviceSessions';
+import type { DeviceSession, SessionStatusFilter } from '../../types';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min
-const TODAY_MS = 24 * 60 * 60 * 1000;
 
-type StatusFilter = 'all' | 'active' | 'today' | 'inactive';
-
-function filterByStatus(sessions: DeviceSession[], status: StatusFilter): DeviceSession[] {
-  const now = Date.now();
-  return sessions.filter(s => {
-    const diff = now - new Date(s.lastSeen).getTime();
-    if (status === 'active') return diff < ACTIVE_MS;
-    if (status === 'today') return diff < TODAY_MS && diff >= ACTIVE_MS;
-    if (status === 'inactive') return diff >= TODAY_MS;
-    return true;
-  });
+function isActiveNow(lastSeen: string) {
+  return Date.now() - new Date(lastSeen).getTime() < ACTIVE_MS;
 }
 
 export default function DeviceSessionsPage() {
-  const { data: sessions, isLoading: loadingSessions, refetch } = useDeviceSessions();
-  const { data: stats, isLoading: loadingStats } = useSessionStats();
-  useSessionStream();
-
   const [selectedSession, setSelectedSession] = useState<DeviceSession | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>('all');
+  const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 10 });
 
-  const loading = loadingSessions || loadingStats;
+  // Buscar al dejar de escribir, no en cada tecla
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQuery(search.trim());
+      setPagination(p => ({ ...p, page: 0 }));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filtered = filterByStatus(
-    (sessions ?? []).filter(s => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        s.deviceId.toLowerCase().includes(q) ||
-        (s.platform ?? '').toLowerCase().includes(q) ||
-        (s.ipAddress ?? '').toLowerCase().includes(q) ||
-        (s.language ?? '').toLowerCase().includes(q)
-      );
-    }),
-    statusFilter,
-  );
+  const {
+    data: sessionPage, isLoading: loadingSessions, isFetching: fetchingSessions, refetch,
+  } = useDeviceSessions({ q: query, status: statusFilter, page: pagination.page, size: pagination.pageSize });
+  const { data: stats, isLoading: loadingStats, refetch: refetchStats } = useSessionStats();
+  const { data: recentSessions, isLoading: loadingRecent, refetch: refetchRecent } = useRecentSessions();
+  useSessionStream();
 
-  const now = Date.now();
-  const activeCount = (sessions ?? []).filter(s => now - new Date(s.lastSeen).getTime() < ACTIVE_MS).length;
-  const todayCount = (sessions ?? []).filter(s => {
-    const d = now - new Date(s.lastSeen).getTime();
-    return d >= ACTIVE_MS && d < TODAY_MS;
-  }).length;
-  const inactiveCount = (sessions ?? []).filter(s => now - new Date(s.lastSeen).getTime() >= TODAY_MS).length;
+  const loading = loadingStats;
+
+  const total = stats?.totalDevices ?? 0;
+  const activeCount = stats?.activeNow ?? 0;
+  const todayCount = Math.max(0, (stats?.activeToday ?? 0) - activeCount);
+  const inactiveCount = Math.max(0, total - (stats?.activeToday ?? 0));
+
+  const changeStatus = (value: SessionStatusFilter) => {
+    setStatusFilter(value);
+    setPagination(p => ({ ...p, page: 0 }));
+  };
+
+  const refreshAll = () => {
+    refetch();
+    refetchStats();
+    refetchRecent();
+  };
 
   return (
     <Box>
-      <PageHeader
-        title="Device Sessions"
-        subtitle="Monitoreo de dispositivos y comportamiento de navegación"
-        action={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Chip
-              label="En vivo"
-              size="small"
-              icon={<Box component="span" sx={{ display:'inline-block', width:6, height:6, borderRadius:'50%', bgcolor:'#065F46', ml:'6px !important', animation:'pulse 1.5s infinite' }} />}
-              sx={{
-                bgcolor: '#D1FAE5', color: '#065F46', fontSize: '0.7rem',
-                '& .MuiChip-icon': { ml: 0 },
-                '@keyframes pulse': {
-                  '0%,100%': { opacity: 1 },
-                  '50%': { opacity: 0.3 },
-                },
-              }}
-            />
-            <Tooltip title="Refrescar ahora">
-              <IconButton
-                size="small"
-                onClick={() => refetch()}
-                sx={{
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '8px',
-                  color: 'text.secondary',
-                  '&:hover': { bgcolor: '#F9FAFB' },
-                }}
-              >
-                <RefreshRoundedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        }
-      />
-
       {/* Stat cards */}
-      <SessionStatCards stats={stats} sessions={sessions} loading={loading} />
+      <SessionStatCards stats={stats} loading={loading} />
 
       {/* Middle row: table + platform chart */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -125,7 +89,7 @@ export default function DeviceSessionsPage() {
             <ToggleButtonGroup
               value={statusFilter}
               exclusive
-              onChange={(_, v) => v && setStatusFilter(v)}
+              onChange={(_, v) => v && changeStatus(v)}
               size="small"
               sx={{
                 '& .MuiToggleButton-root': {
@@ -148,18 +112,48 @@ export default function DeviceSessionsPage() {
               }}
             >
               <ToggleButton value="all">
-                Todos · {loadingSessions ? '…' : (sessions?.length ?? 0)}
+                Todos · {loadingStats ? '…' : total}
               </ToggleButton>
               <ToggleButton value="active">
-                Activos · {loadingSessions ? '…' : activeCount}
+                Activos · {loadingStats ? '…' : activeCount}
               </ToggleButton>
               <ToggleButton value="today">
-                Hoy · {loadingSessions ? '…' : todayCount}
+                Hoy · {loadingStats ? '…' : todayCount}
               </ToggleButton>
               <ToggleButton value="inactive">
-                Inactivos · {loadingSessions ? '…' : inactiveCount}
+                Inactivos · {loadingStats ? '…' : inactiveCount}
               </ToggleButton>
             </ToggleButtonGroup>
+
+            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Chip
+                label="En vivo"
+                size="small"
+                icon={<Box component="span" sx={{ display:'inline-block', width:6, height:6, borderRadius:'50%', bgcolor:'#065F46', ml:'6px !important', animation:'pulse 1.5s infinite' }} />}
+                sx={{
+                  bgcolor: '#D1FAE5', color: '#065F46', fontSize: '0.7rem',
+                  '& .MuiChip-icon': { ml: 0 },
+                  '@keyframes pulse': {
+                    '0%,100%': { opacity: 1 },
+                    '50%': { opacity: 0.3 },
+                  },
+                }}
+              />
+              <Tooltip title="Refrescar ahora">
+                <IconButton
+                  size="small"
+                  onClick={refreshAll}
+                  sx={{
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '8px',
+                    color: 'text.secondary',
+                    '&:hover': { bgcolor: '#F9FAFB' },
+                  }}
+                >
+                  <RefreshRoundedIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Box>
         </Grid>
 
@@ -169,8 +163,11 @@ export default function DeviceSessionsPage() {
             <Skeleton variant="rounded" height={480} sx={{ borderRadius: '18px' }} />
           ) : (
             <SessionsDataGrid
-              rows={filtered}
-              loading={loadingSessions}
+              rows={sessionPage?.content ?? []}
+              rowCount={sessionPage?.totalElements ?? 0}
+              paginationModel={pagination}
+              onPaginationModelChange={setPagination}
+              loading={fetchingSessions}
               onRowClick={setSelectedSession}
               selectedId={selectedSession?.id ?? null}
             />
@@ -195,18 +192,14 @@ export default function DeviceSessionsPage() {
               <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 2 }}>
                 Actividad reciente
               </Typography>
-              {loadingSessions ? (
+              {loadingRecent ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <Skeleton key={i} variant="rounded" height={36} sx={{ mb: 1, borderRadius: '8px' }} />
                 ))
               ) : (
-                (sessions ?? [])
-                  .slice()
-                  .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
-                  .slice(0, 6)
+                (recentSessions ?? [])
                   .map(s => {
-                    const diff = now - new Date(s.lastSeen).getTime();
-                    const isActive = diff < ACTIVE_MS;
+                    const isActive = isActiveNow(s.lastSeen);
                     return (
                       <Box
                         key={s.id}

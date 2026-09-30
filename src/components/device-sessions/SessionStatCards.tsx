@@ -4,28 +4,22 @@ import RepeatRoundedIcon from '@mui/icons-material/RepeatRounded';
 import PhoneAndroidRoundedIcon from '@mui/icons-material/PhoneAndroidRounded';
 import LaptopRoundedIcon from '@mui/icons-material/LaptopRounded';
 import StatCard from '../../components/StatCard';
-import type { DeviceSession, SessionStats } from '../../types';
-
-const ACTIVE_MS = 24 * 60 * 60 * 1000; // 24 h
+import type { SessionStats } from '../../types';
 
 interface Props {
   stats?: SessionStats;
-  sessions?: DeviceSession[];
   loading: boolean;
 }
 
-export default function SessionStatCards({ stats, sessions, loading }: Props) {
-  const now = Date.now();
+export default function SessionStatCards({ stats, loading }: Props) {
+  const byPlatform = stats?.byPlatform ?? {};
+  const activeToday = stats?.activeToday ?? 0;
 
-  const activeToday = sessions?.filter(
-    s => now - new Date(s.lastSeen).getTime() < ACTIVE_MS
-  ).length ?? 0;
+  const mobileCount = (byPlatform.Android ?? 0) + (byPlatform.iOS ?? 0);
 
-  const mobileCount =
-    sessions?.filter(s => s.platform === 'Android' || s.platform === 'iOS').length ?? 0;
-
-  const desktopCount =
-    sessions?.filter(s => s.platform?.startsWith('Desktop')).length ?? 0;
+  const desktopCount = Object.entries(byPlatform)
+    .filter(([platform]) => platform.startsWith('Desktop'))
+    .reduce((sum, [, count]) => sum + count, 0);
 
   const cards = [
     {

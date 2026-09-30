@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from '../components/ProtectedRoute';
 import LoginPage from '../pages/LoginPage';
@@ -8,11 +8,9 @@ import DashboardPage from '../pages/DashboardPage';
 import MapPage from '../pages/MapPage';
 import NodesPage from '../pages/NodesPage';
 import SettingsPage from '../pages/SettingsPage';
-import DeviceSessionsPage from '../pages/device-sessions/DeviceSessionsPage';
-import TripsPage from '../pages/TripsPage';
+import ActivityPage from '../pages/ActivityPage';
 import CampusPage from '../pages/CampusPage';
 import UsersPage from '../pages/users/UsersPage';
-import PoiEditorPage from '../pages/PoiEditorPage';
 import NotFoundPage from '../pages/NotFoundPage';
 
 const router = createBrowserRouter([
@@ -33,10 +31,10 @@ const router = createBrowserRouter([
           { path: 'map', element: <MapPage /> },
           { path: 'nodes', element: <NodesPage /> },
           { path: 'campus', element: <CampusPage /> },
-          { path: 'ar-points', element: <PoiEditorPage /> },
+          { path: 'ar-points', element: <Navigate to="/map?tab=ar" replace /> },
           { path: 'settings', element: <SettingsPage /> },
-          { path: 'sessions', element: <DeviceSessionsPage /> },
-          { path: 'trips', element: <TripsPage /> },
+          { path: 'sessions', element: <ActivityPage /> },
+          { path: 'trips', element: <Navigate to="/sessions?tab=trips" replace /> },
           { path: 'users', element: <UsersPage /> },
         ],
       },

@@ -134,6 +134,21 @@ export interface SessionStats {
   totalDevices: number;
   totalSessions: number;
   byPlatform: Record<string, number>;
+  /** Con ping en los últimos 10 min */
+  activeNow: number;
+  /** Con ping en las últimas 24 h (incluye activeNow) */
+  activeToday: number;
+}
+
+export type SessionStatusFilter = 'all' | 'active' | 'today' | 'inactive';
+
+/** Página de resultados del backend; page empieza en 0. */
+export interface PageResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 }
 
 // ──────────────── NavigationTrip ──────────────────────────────
@@ -163,6 +178,36 @@ export interface NavigationTrip {
   modeSwitches?: number;
   vpsFailures?: number;
   usedAR?: boolean;
+}
+
+export interface TripFilters {
+  from?: string; // ISO-8601
+  to?: string;
+  building?: string;
+}
+
+export interface TripDestinationStats {
+  building?: string;
+  roomName: string;
+  total: number;
+  finished: number;
+  arrived: number;
+  avgArrivalMs: number | null;
+  medianArrivalMs: number | null;
+}
+
+export interface TripSummary {
+  total: number;
+  finished: number;
+  arrived: number;
+  inProgress: number;
+  avgArrivalMs: number | null;
+  medianArrivalMs: number | null;
+  avgLocalizedMs: number | null;
+  avgVpsFailures: number | null;
+  byDestination: TripDestinationStats[];
+  abandonReasons: { reason: string; count: number }[];
+  buildings: string[];
 }
 
 // ──────────────── AppSetting (Feature Flags) ────────────────

@@ -5,7 +5,7 @@ import L from 'leaflet';
 import {
   Box, Paper, Typography, Button, Chip, ToggleButton, ToggleButtonGroup,
   List, ListItem, ListItemText, Tooltip, IconButton, Alert,
-  TextField, MenuItem, Divider, Tab, Tabs,
+  TextField, MenuItem, Divider,
 } from '@mui/material';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import AltRouteRoundedIcon from '@mui/icons-material/AltRouteRounded';
@@ -19,11 +19,15 @@ import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
 import GridOnRoundedIcon from '@mui/icons-material/GridOnRounded';
 import SatelliteAltRoundedIcon from '@mui/icons-material/SatelliteAltRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
+import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
+import { useSearchParams } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import { graphService } from '../services/graphService';
 import { roomService } from '../services/roomService';
 import type { GraphNode, GraphEdge } from '../types';
 import PageHeader from '../components/PageHeader';
+import SectionTabs, { type SectionTab } from '../components/SectionTabs';
+import PoiEditorPage from './PoiEditorPage';
 import { dijkstra, findStartNode, haversineDistance, formatDistance, formatETA } from '../utils/dijkstra';
 import campusRender from '../assets/campus-render.webp';
 
@@ -981,9 +985,27 @@ function PixelMapEditor({
 }
 
 // ── Main page ──────────────────────────────────────────────────
+type MapTab = 'editor' | 'preview' | 'pixel' | 'ar';
+
+const MAP_TABS: SectionTab<MapTab>[] = [
+  { value: 'editor', label: 'Caminos', icon: <EditRoundedIcon sx={{ fontSize: 16 }} /> },
+  { value: 'preview', label: 'Vista usuario', icon: <NavigationRoundedIcon sx={{ fontSize: 16 }} /> },
+  { value: 'pixel', label: 'Mapa 2D', icon: <GridOnRoundedIcon sx={{ fontSize: 16 }} /> },
+  { value: 'ar', label: 'Interior AR', icon: <ViewInArRoundedIcon sx={{ fontSize: 16 }} /> },
+];
+
+const MAP_SUBTITLES: Record<MapTab, string> = {
+  editor: 'Nodos y caminos exteriores que usa la navegación GPS',
+  preview: 'Simula la ruta que verá un estudiante en el mapa exterior',
+  pixel: 'Ubica los nodos sobre la imagen 2D del campus',
+  ar: 'Destinos de cada salón y escaleras sobre el escaneo 3D de MultiSet',
+};
+
 export default function MapPage() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<'editor' | 'preview' | 'pixel'>('editor');
+  const [params, setParams] = useSearchParams();
+  const tab: MapTab = MAP_TABS.some(t => t.value === params.get('tab')) ? params.get('tab') as MapTab : 'editor';
+  const setTab = (v: MapTab) => setParams(v === 'editor' ? {} : { tab: v }, { replace: true });
   const [mapLayer, setMapLayer] = useState<TileLayerType>('street');
   const [mode, setMode] = useState<Mode>('view');
   const [edgeNodeA, setEdgeNodeA] = useState<string | null>(null);
@@ -1139,25 +1161,13 @@ export default function MapPage() {
     <Box sx={{ height: 'calc(100vh - 64px - 48px)', display: 'flex', flexDirection: 'column' }}>
       <PageHeader
         title="Mapa del campus"
-        subtitle="Editor de grafo y simulación de navegación para usuarios"
-        action={
-          <Tabs
-            value={tab}
-            onChange={(_, v) => setTab(v)}
-            sx={{
-              minHeight: 36,
-              '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' },
-              '& .MuiTabs-indicator': { bgcolor: '#00d084' },
-            }}
-          >
-            <Tab value="editor" icon={<EditRoundedIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Editor" />
-            <Tab value="preview" icon={<NavigationRoundedIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Vista usuario" />
-            <Tab value="pixel" icon={<GridOnRoundedIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Mapa 2D" />
-          </Tabs>
-        }
+        subtitle={MAP_SUBTITLES[tab]}
+        action={<SectionTabs value={tab} tabs={MAP_TABS} onChange={setTab} />}
       />
 
-      {tab === 'preview' ? (
+      {tab === 'ar' ? (
+        <PoiEditorPage />
+      ) : tab === 'preview' ? (
         <UserNavPreview nodes={nodes} edges={edges} />
       ) : tab === 'pixel' ? (
         <PixelMapEditor nodes={nodes} edges={edges} onUpdatePixel={handlePixelUpdate} />

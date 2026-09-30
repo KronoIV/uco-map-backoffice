@@ -12,9 +12,13 @@ import { graphService } from '../services/graphService';
 import { buildingService } from '../services/buildingService';
 import { roomService } from '../services/roomService';
 import { deviceSessionService } from '../services/deviceSessionService';
-import { useSessionStream } from '../hooks/useDeviceSessions';
+import { useRecentSessions, useSessionStream } from '../hooks/useDeviceSessions';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min
+
+function isActiveNow(lastSeen: string) {
+  return Date.now() - new Date(lastSeen).getTime() < ACTIVE_MS;
+}
 
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -49,13 +53,7 @@ export default function DashboardPage() {
     queryFn: () => roomService.getAll(),
     retry: false,
   });
-  const { data: sessions, isLoading: loadingSessions } = useQuery({
-    queryKey: ['device-sessions'],
-    queryFn: deviceSessionService.getAll,
-    retry: false,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
+  const { data: recentSessions = [], isLoading: loadingSessions } = useRecentSessions();
   const { data: sessionStats, isLoading: loadingStats } = useQuery({
     queryKey: ['session-stats'],
     queryFn: deviceSessionService.getStats,
@@ -66,12 +64,7 @@ export default function DashboardPage() {
 
   const loading = loadingNodes || loadingEdges || loadingBuildings || loadingRooms;
 
-  const now = Date.now();
-  const activeNow = (sessions ?? []).filter(s => now - new Date(s.lastSeen).getTime() < ACTIVE_MS).length;
-  const recentSessions = (sessions ?? [])
-    .slice()
-    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
-    .slice(0, 6);
+  const activeNow = sessionStats?.activeNow ?? 0;
 
   const stats = [
     {
@@ -150,7 +143,7 @@ export default function DashboardPage() {
 
         {/* Active now */}
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          {loadingSessions ? (
+          {loadingStats ? (
             <Skeleton variant="rounded" height={110} sx={{ borderRadius: '18px' }} />
           ) : (
             <Paper
@@ -326,7 +319,7 @@ export default function DashboardPage() {
                     <Skeleton key={i} variant="rounded" height={44} sx={{ mb: 0.5, borderRadius: '10px' }} />
                   ))
                 : recentSessions.map(s => {
-                    const isActive = now - new Date(s.lastSeen).getTime() < ACTIVE_MS;
+                    const isActive = isActiveNow(s.lastSeen);
                     return (
                       <Box
                         key={s.id}

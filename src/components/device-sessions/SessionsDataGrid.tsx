@@ -1,11 +1,5 @@
-import {
-  DataGrid,
-  GridToolbarContainer,
-  GridToolbarFilterButton,
-  GridToolbarExport,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid';
-import type { GridColDef } from '@mui/x-data-grid';
+import { DataGrid } from '@mui/x-data-grid';
+import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import { Box, Chip, Typography } from '@mui/material';
 import type { DeviceSession } from '../../types';
 
@@ -137,44 +131,19 @@ const columns: GridColDef<DeviceSession>[] = [
   },
 ];
 
-function CustomToolbar() {
-  return (
-    <GridToolbarContainer
-      sx={{
-        px: 2,
-        py: 1,
-        gap: 1,
-        borderBottom: '1px solid #F1F1F1',
-        justifyContent: 'space-between',
-      }}
-    >
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <GridToolbarFilterButton />
-        <GridToolbarExport />
-      </Box>
-      <Box
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: '100px',
-            height: 32,
-            fontSize: '0.8125rem',
-          },
-        }}
-      >
-        <GridToolbarQuickFilter />
-      </Box>
-    </GridToolbarContainer>
-  );
-}
-
 interface Props {
   rows: DeviceSession[];
+  rowCount: number;
+  paginationModel: GridPaginationModel;
+  onPaginationModelChange: (model: GridPaginationModel) => void;
   loading: boolean;
   onRowClick: (session: DeviceSession) => void;
   selectedId: string | null;
 }
 
-export default function SessionsDataGrid({ rows, loading, onRowClick, selectedId }: Props) {
+export default function SessionsDataGrid({
+  rows, rowCount, paginationModel, onPaginationModelChange, loading, onRowClick, selectedId,
+}: Props) {
   return (
     <Box
       sx={{
@@ -196,9 +165,13 @@ export default function SessionsDataGrid({ rows, loading, onRowClick, selectedId
           ? { type: 'include', ids: new Set([selectedId]) }
           : { type: 'include', ids: new Set() }
         }
-        slots={{ toolbar: CustomToolbar }}
+        paginationMode="server"
+        rowCount={rowCount}
+        paginationModel={paginationModel}
+        onPaginationModelChange={onPaginationModelChange}
         pageSizeOptions={[10, 25, 50]}
-        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+        disableColumnSorting
+        disableColumnFilter
         sx={{
           border: 'none',
           fontSize: '0.8125rem',
