@@ -43,7 +43,7 @@ export default function DeviceSessionsPage() {
   } = useDeviceSessions({ q: query, status: statusFilter, page: pagination.page, size: pagination.pageSize });
   const { data: stats, isLoading: loadingStats, refetch: refetchStats } = useSessionStats();
   const { data: recentSessions, isLoading: loadingRecent, refetch: refetchRecent } = useRecentSessions();
-  useSessionStream();
+  const { connected: liveConnected } = useSessionStream();
 
   const loading = loadingStats;
 
@@ -127,11 +127,13 @@ export default function DeviceSessionsPage() {
 
             <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
               <Chip
-                label="En vivo"
+                label={liveConnected ? 'En vivo' : 'Reconectando…'}
                 size="small"
-                icon={<Box component="span" sx={{ display:'inline-block', width:6, height:6, borderRadius:'50%', bgcolor:'#065F46', ml:'6px !important', animation:'pulse 1.5s infinite' }} />}
+                icon={<Box component="span" sx={{ display:'inline-block', width:6, height:6, borderRadius:'50%', bgcolor: liveConnected ? '#065F46' : '#92400E', ml:'6px !important', animation:'pulse 1.5s infinite' }} />}
                 sx={{
-                  bgcolor: '#D1FAE5', color: '#065F46', fontSize: '0.7rem',
+                  bgcolor: liveConnected ? '#D1FAE5' : '#FEF3C7',
+                  color: liveConnected ? '#065F46' : '#92400E',
+                  fontSize: '0.7rem',
                   '& .MuiChip-icon': { ml: 0 },
                   '@keyframes pulse': {
                     '0%,100%': { opacity: 1 },

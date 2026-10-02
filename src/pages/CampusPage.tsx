@@ -605,7 +605,7 @@ export default function CampusPage() {
     <Box>
       <PageHeader
         title="Campus"
-        subtitle="Gestión de edificios y salones del campus UCO"
+        subtitle="Gestión de edificios y lugares del campus UCO"
       />
 
       <Box
@@ -621,7 +621,7 @@ export default function CampusPage() {
       >
         {[
           { label: 'Edificios', icon: <ApartmentRoundedIcon sx={{ fontSize: 18 }} /> },
-          { label: 'Salones', icon: <MeetingRoomRoundedIcon sx={{ fontSize: 18 }} /> },
+          { label: 'Lugares', icon: <MeetingRoomRoundedIcon sx={{ fontSize: 18 }} /> },
         ].map((item, i) => (
           <Box
             key={item.label}
