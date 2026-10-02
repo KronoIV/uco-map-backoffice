@@ -5,6 +5,7 @@ import PhoneAndroidRoundedIcon from '@mui/icons-material/PhoneAndroidRounded';
 import LaptopRoundedIcon from '@mui/icons-material/LaptopRounded';
 import StatCard from '../../components/StatCard';
 import type { SessionStats } from '../../types';
+import { PLATFORM_LABEL, fmtDuration } from '../../utils/analyticsFormat';
 
 interface Props {
   stats?: SessionStats;
@@ -30,9 +31,11 @@ export default function SessionStatCards({ stats, loading }: Props) {
       color: '#00d084',
     },
     {
-      title: 'Total sesiones',
-      value: loading ? '—' : (stats?.totalSessions ?? 0),
-      subtitle: 'Pings acumulados',
+      title: 'Visitas',
+      value: loading ? '—' : (stats?.totalVisits ?? 0),
+      subtitle: stats?.totalActiveMs
+        ? `${fmtDuration(stats.totalActiveMs)} de uso real en total`
+        : 'Se miden desde la versión 2.1',
       icon: <RepeatRoundedIcon />,
       color: '#6366F1',
     },
@@ -139,7 +142,7 @@ export function PlatformDistribution({
                       }}
                     />
                     <Typography sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
-                      {platform}
+                      {PLATFORM_LABEL[platform] ?? platform}
                     </Typography>
                   </Box>
                   <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>

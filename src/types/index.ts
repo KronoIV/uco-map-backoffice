@@ -127,17 +127,32 @@ export interface DeviceSession {
   networkType?: string;
   firstSeen: string; // ISO-8601
   lastSeen: string;  // ISO-8601
+  /** Pings recibidos (la app avisa cada 2 min y en cada pantalla): no son visitas. */
   sessionCount: number;
+  /** Visitas reales; 0 en dispositivos que solo usaron versiones anteriores a la 2.1. */
+  visitCount?: number;
+  /** Tiempo de uso real sumado de todas sus visitas (ms). */
+  totalActiveMs?: number;
+  permissions?: PermissionSnapshot;
+}
+
+export interface PermissionSnapshot {
+  camera?: string;
+  location?: string;
+  motion?: string;
 }
 
 export interface SessionStats {
   totalDevices: number;
+  /** Pings acumulados (histórico). */
   totalSessions: number;
   byPlatform: Record<string, number>;
   /** Con ping en los últimos 10 min */
   activeNow: number;
   /** Con ping en las últimas 24 h (incluye activeNow) */
   activeToday: number;
+  totalVisits?: number;
+  totalActiveMs?: number;
 }
 
 export type SessionStatusFilter = 'all' | 'active' | 'today' | 'inactive';
@@ -165,6 +180,8 @@ export interface NavigationTrip {
   startMode?: 'indoor' | 'outdoor' | 'ask';
   startDistanceM?: number;
   startAccuracyM?: number;
+  startLat?: number;
+  startLng?: number;
   status: TripStatus;
   endReason?: string;
   startedAt: string; // ISO-8601

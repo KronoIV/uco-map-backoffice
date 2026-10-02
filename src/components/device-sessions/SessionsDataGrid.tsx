@@ -2,6 +2,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import { Box, Chip, Typography } from '@mui/material';
 import type { DeviceSession } from '../../types';
+import { PLATFORM_LABEL, fmtDuration } from '../../utils/analyticsFormat';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min → "activo ahora"
 const TODAY_MS = 24 * 60 * 60 * 1000;
@@ -21,17 +22,6 @@ function fmtDate(iso: string) {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
-}
-
-function fmtDuration(firstSeen: string, lastSeen: string) {
-  const ms = new Date(lastSeen).getTime() - new Date(firstSeen).getTime();
-  if (ms < 0) return '—';
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  const s = Math.floor((ms % 60_000) / 1_000);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
 }
 
 const columns: GridColDef<DeviceSession>[] = [
@@ -54,7 +44,7 @@ const columns: GridColDef<DeviceSession>[] = [
     width: 150,
     renderCell: ({ value }) => (
       <Chip
-        label={value ?? '—'}
+        label={PLATFORM_LABEL[value as string] ?? value ?? '—'}
         size="small"
         sx={{ bgcolor: '#F3F4F6', color: '#374151', fontWeight: 500 }}
       />
@@ -79,13 +69,14 @@ const columns: GridColDef<DeviceSession>[] = [
     ),
   },
   {
-    field: 'sessionCount',
-    headerName: 'Pings',
+    field: 'visitCount',
+    headerName: 'Visitas',
     width: 80,
     type: 'number',
+    description: 'Aperturas de la app (una visita termina tras 30 min sin uso). — = solo versíones anteriores a la 2.1',
     renderCell: ({ value }) => (
       <Chip
-        label={value}
+        label={value ? value : '—'}
         size="small"
         sx={{ bgcolor: '#EDE9FE', color: '#5B21B6', fontWeight: 700 }}
       />
@@ -108,17 +99,14 @@ const columns: GridColDef<DeviceSession>[] = [
     ),
   },
   {
-    field: '_duration',
-    headerName: 'Tiempo activo',
+    field: 'totalActiveMs',
+    headerName: 'Tiempo de uso',
     width: 130,
     sortable: false,
-    valueGetter: (_value, row) => {
-      const ms = new Date(row.lastSeen).getTime() - new Date(row.firstSeen).getTime();
-      return ms;
-    },
+    description: 'Suma del tiempo con la app en pantalla y en uso de todas sus visitas',
     renderCell: ({ row }) => (
       <Typography sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
-        {fmtDuration(row.firstSeen, row.lastSeen)}
+        {row.visitCount ? fmtDuration(row.totalActiveMs ?? 0) : '—'}
       </Typography>
     ),
   },

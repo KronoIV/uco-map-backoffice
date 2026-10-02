@@ -1,36 +1,30 @@
 import { useMemo, useState } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Box, Button, Chip, Grid, IconButton, MenuItem, Paper, Skeleton, Table, TableBody, TableCell,
-  TableHead, TableRow, TextField, Tooltip, Typography,
+  Box, Button, Chip, Grid, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
-import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
-import RouteRoundedIcon from '@mui/icons-material/RouteRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import TimerRoundedIcon from '@mui/icons-material/TimerRounded';
-import GpsFixedRoundedIcon from '@mui/icons-material/GpsFixedRounded';
-import StatCard from '../components/StatCard';
+import EastRoundedIcon from '@mui/icons-material/EastRounded';
+import PeriodFilter from '../components/analytics/PeriodFilter';
+import KpiCard from '../components/analytics/KpiCard';
+import ChartCard, { cardSx } from '../components/analytics/ChartCard';
+import TrendChart from '../components/analytics/charts/TrendChart';
+import BarList from '../components/analytics/charts/BarList';
+import ColumnChart from '../components/analytics/charts/ColumnChart';
+import WeekHourHeatmap from '../components/analytics/charts/WeekHourHeatmap';
+import TripsMap from '../components/analytics/TripsMap';
+import { usePeriod } from '../hooks/usePeriod';
 import { tripService } from '../services/tripService';
+import { analyticsService } from '../services/analyticsService';
 import type { NavigationTrip, TripFilters } from '../types';
-
-const END_REASON_LABEL: Record<string, string> = {
-  'ar-arrival': 'Llegó (AR)',
-  'building-arrival': 'Llegó al edificio',
-  closed: 'Cerró la navegación',
-  'destination-changed': 'Cambió de destino',
-  'page-closed': 'Cerró la app',
-  timeout: 'Salió de la app sin cerrar',
-};
-
-const cardSx = {
-  bgcolor: '#fff',
-  border: '1px solid #F1F1F1',
-  borderRadius: '18px',
-  boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
-};
+import type { TripAnalytics } from '../types/analytics';
+import {
+  ABANDON_STAGE_LABEL, END_REASON_LABEL, START_MODE_LABEL, fmtDay, fmtDuration as fmtDurationLong, fmtMeters as fmtMetersLong,
+  fmtNumber, fmtPercent,
+} from '../utils/analyticsFormat';
 
 function fmtDuration(ms?: number | null) {
   if (ms == null) return '—';
@@ -48,10 +42,6 @@ function fmtDate(iso?: string) {
   return new Date(iso).toLocaleString('es-CO', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
-}
-
-function pct(part: number, total: number) {
-  return total > 0 ? `${Math.round((part / total) * 100)}%` : '—';
 }
 
 function statusChip(trip: NavigationTrip) {
@@ -107,24 +97,33 @@ const columns: GridColDef<NavigationTrip>[] = [
   { field: 'deviceId', headerName: 'Dispositivo', width: 120 },
 ];
 
-function toFilters(from: string, to: string, building: string): TripFilters {
-  return {
-    // Las fechas del selector son locales: el día completo en la zona horaria del navegador
-    from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
-    to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
-    building: building === 'all' ? undefined : building,
-  };
+type Destination = TripAnalytics['destinations'][number];
+
+/** Destinos con al menos 3 recorridos terminados y menor tasa de llegada (los que más cuestan encontrar). */
+function hardestDestinations(destinations: Destination[]): Destination[] {
+  return destinations
+    .filter(d => d.arrived + d.abandoned >= 3 && d.completionRate != null)
+    .sort((a, b) => (a.completionRate ?? 0) - (b.completionRate ?? 0))
+    .slice(0, 5);
 }
 
 export default function TripsPage() {
-  const queryClient = useQueryClient();
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [building, setBuilding] = useState('all');
+  const period = usePeriod();
+  const [params, setParams] = useSearchParams();
+  const building = params.get('edificio') ?? '';
   const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 25 });
   const [exporting, setExporting] = useState(false);
 
-  const filters = useMemo(() => toFilters(from, to, building), [from, to, building]);
+  const query = useMemo(() => ({ ...period.query, building: building || undefined }), [period.query, building]);
+  const filters: TripFilters = useMemo(() => ({ from: query.from, to: query.to, building: query.building }), [query]);
+
+  const analytics = useQuery({
+    queryKey: ['analytics', 'trips', query],
+    queryFn: () => analyticsService.getTrips(query),
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
 
   const { data: tripPage, isLoading: loadingPage, isFetching: fetchingPage } = useQuery({
     queryKey: ['navigation-trips', 'page', filters, pagination.page, pagination.pageSize],
@@ -133,20 +132,14 @@ export default function TripsPage() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: summary, isLoading: loadingSummary, isFetching: fetchingSummary } = useQuery({
-    queryKey: ['navigation-trips', 'summary', filters],
-    queryFn: () => tripService.getSummary(filters),
-    placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
-  });
-
-  // Al cambiar un filtro se vuelve a la primera página
-  const withFirstPage = <T,>(setter: (v: T) => void) => (v: T) => {
-    setter(v);
+  const setBuilding = (b: string) => {
+    setParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (b) next.set('edificio', b); else next.delete('edificio');
+      return next;
+    }, { replace: true });
     setPagination(p => ({ ...p, page: 0 }));
   };
-
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['navigation-trips'] });
 
   const exportCsv = async () => {
     setExporting(true);
@@ -163,143 +156,175 @@ export default function TripsPage() {
     }
   };
 
-  const buildings = summary?.buildings ?? [];
-  const byDestination = summary?.byDestination ?? [];
-  const abandonReasons = summary?.abandonReasons ?? [];
-
-  const cards = [
-    {
-      title: 'Recorridos',
-      value: summary?.total ?? 0,
-      subtitle: `${summary?.finished ?? 0} terminados · ${summary?.inProgress ?? 0} en curso`,
-      icon: <RouteRoundedIcon />,
-      color: '#6366F1',
-    },
-    {
-      title: 'Tasa de éxito',
-      value: pct(summary?.arrived ?? 0, summary?.finished ?? 0),
-      subtitle: `${summary?.arrived ?? 0} de ${summary?.finished ?? 0} llegaron al destino`,
-      icon: <CheckCircleRoundedIcon />,
-      color: '#00d084',
-    },
-    {
-      title: 'Tiempo de llegada',
-      value: fmtDuration(summary?.avgArrivalMs),
-      subtitle: `Promedio · mediana ${fmtDuration(summary?.medianArrivalMs)}`,
-      icon: <TimerRoundedIcon />,
-      color: '#F59E0B',
-    },
-    {
-      title: 'Ubicación VPS',
-      value: fmtDuration(summary?.avgLocalizedMs),
-      subtitle: summary?.avgVpsFailures == null
-        ? 'Sin sesiones AR'
-        : `Promedio · ${summary.avgVpsFailures.toFixed(1)} fallos por recorrido AR`,
-      icon: <GpsFixedRoundedIcon />,
-      color: '#3B82F6',
-    },
-  ];
+  const t = analytics.data;
+  const s = t?.summary;
+  const loading = analytics.isLoading;
+  const err = analytics.error;
+  const pl = period.previousLabel;
+  const noTrips = !t || (s?.total.value ?? 0) === 0;
+  const finished = (s?.arrived.value ?? 0) + (s?.abandoned.value ?? 0);
+  const hardest = t ? hardestDestinations(t.destinations) : [];
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
-        <TextField
-          label="Desde" type="date" size="small" value={from}
-          onChange={e => withFirstPage(setFrom)(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        <TextField
-          label="Hasta" type="date" size="small" value={to}
-          onChange={e => withFirstPage(setTo)(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        <TextField
-          select label="Edificio" size="small" value={building}
-          onChange={e => withFirstPage(setBuilding)(e.target.value)} sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="all">Todos</MenuItem>
-          {buildings.map(b => <MenuItem key={b} value={b}>{b}</MenuItem>)}
+      <PeriodFilter period={period} fetching={analytics.isFetching || fetchingPage}>
+        <TextField select size="small" label="Edificio" value={building} onChange={e => setBuilding(e.target.value)} sx={{ minWidth: 150 }}>
+          <MenuItem value="">Todos</MenuItem>
+          {(t?.buildings ?? []).map(b => <MenuItem key={b} value={b}>{b}</MenuItem>)}
         </TextField>
-        <Box sx={{ ml: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Button
-            size="small" variant="outlined" startIcon={<DownloadRoundedIcon />}
-            onClick={exportCsv} disabled={exporting}
-            sx={{ borderRadius: '8px', textTransform: 'none' }}
-          >
-            {exporting ? 'Exportando…' : 'Exportar CSV'}
-          </Button>
-          <Tooltip title="Refrescar">
-            <Box component="span">
-              <IconButton
-                size="small"
-                onClick={refresh}
-                disabled={fetchingPage || fetchingSummary}
-                sx={{ border: '1px solid #E5E7EB', borderRadius: '8px', color: 'text.secondary' }}
-              >
-                <RefreshRoundedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Box>
-          </Tooltip>
-        </Box>
+      </PeriodFilter>
+
+      {/* ── Resumen de recorridos ── */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
+          <KpiCard loading={loading} label="Recorridos" value={fmtNumber(s?.total.value)} metric={s?.total} previousLabel={pl}
+            sub={s ? `${fmtNumber(s.inProgress)} en curso ahora` : undefined}
+            info="Recorridos iniciados (el usuario confirmó un destino)." />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
+          <KpiCard loading={loading} label="Llegaron al destino" value={fmtPercent(s?.completionRate.value)} metric={s?.completionRate}
+            isRate previousLabel={pl} sub={s ? `${fmtNumber(s.arrived.value)} de ${fmtNumber(finished)} terminados` : undefined}
+            info="Llegados sobre terminados (llegados + abandonados)." />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
+          <KpiCard loading={loading} label="Tiempo típico hasta llegar" value={fmtDurationLong(s?.medianDurationMs)}
+            sub={s ? `75 %: ${fmtDurationLong(s.p75DurationMs)} · 90 %: ${fmtDurationLong(s.p90DurationMs)}` : undefined}
+            info="Mediana de la duración de los recorridos que llegaron. 75 % / 90 %: tiempo dentro del que llega ese porcentaje." />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
+          <KpiCard loading={loading} label="Abandonados" value={fmtNumber(s?.abandoned.value)} metric={s?.abandoned}
+            higherIsBetter={false} previousLabel={pl}
+            sub={s?.medianAbandonMs != null ? `Abandonan a los ${fmtDurationLong(s.medianAbandonMs)} (mediana)` : undefined} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
+          <KpiCard loading={loading} label="Usaron la cámara" value={fmtPercent(s?.arUsageRate)}
+            sub={s?.medianLocalizedMs != null
+              ? `Se ubican en ${fmtDurationLong(s.medianLocalizedMs)} · ${fmtNumber(s.avgVpsFailures, 1)} fallos de media`
+              : 'Ningún recorrido llegó a ubicarse con la cámara'}
+            info="Recorridos terminados que abrieron la guía con cámara. Ubicarse = primera ubicación lograda por la cámara (VPS)." />
+        </Grid>
+      </Grid>
+
+      {/* ── Cuándo ── */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <ChartCard title="Recorridos por día" subtitle={period.label} loading={loading} error={err} empty={noTrips}>
+            {t && (
+              <TrendChart ariaLabel="Recorridos por día" labels={t.daily.map(x => fmtDay(x.date))}
+                series={[
+                  { name: 'Iniciados', color: '#3B82F6', values: t.daily.map(x => x.total) },
+                  { name: 'Llegaron', color: '#00b874', values: t.daily.map(x => x.arrived) },
+                  { name: 'Abandonados', color: '#EF4444', values: t.daily.map(x => x.abandoned), dashed: true },
+                ]} />
+            )}
+          </ChartCard>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <ChartCard title="Horas de más tráfico" subtitle="Recorridos iniciados por día de la semana y hora" loading={loading}
+            error={err} empty={noTrips} info="Hora local de Colombia.">
+            {t && <WeekHourHeatmap grid={t.byWeekdayHour} unit="recorridos" color={[59, 130, 246]} />}
+          </ChartCard>
+        </Grid>
+      </Grid>
+
+      {/* ── Dónde ── */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <ChartCard title="Mapa de actividad" subtitle="Dónde empiezan los recorridos y a qué edificio van" loading={loading} error={err}
+            empty={!t || (t.originPoints.length === 0 && t.destinationPoints.length === 0)}
+            emptyText="Sin puntos para mostrar: los edificios necesitan coordenadas GPS y el punto de partida se registra desde la versión 2.1"
+            info="El punto de partida se guarda redondeado (~11 m) y se agrupa en celdas de ~22 m: el mapa no muestra recorridos individuales.">
+            {t && <TripsMap origins={t.originPoints} destinations={t.destinationPoints} />}
+          </ChartCard>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <ChartCard title="Desde dónde salen" subtitle={s ? `Con punto de partida: ${fmtNumber(s.withOrigin)} de ${fmtNumber(s.total.value)} recorridos` : undefined}
+            info="Edificio a menos de 80 m del punto de partida, otra zona del campus (a menos de 600 m) o fuera de él. «Sin ubicación»: sin permiso de ubicación o versión anterior de la app."
+            loading={loading} error={err} empty={noTrips}>
+            {t && (
+              <>
+                <BarList color="#F59E0B" items={t.origins.slice(0, 7).map(o => ({
+                  key: o.label, label: o.label, value: o.total,
+                  hint: `${fmtPercent(o.total ? o.arrived / o.total : null)} llegaron a su destino`,
+                }))} />
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, mt: 2.5, mb: 1 }}>Distancia al edificio al empezar</Typography>
+                <ColumnChart color="#F59E0B" height={70}
+                  items={t.startDistances.map(b => ({ label: b.label, value: b.count }))} />
+              </>
+            )}
+          </ChartCard>
+        </Grid>
+      </Grid>
+
+      {/* ── Rutas ── */}
+      <Box sx={{ mb: 2 }}>
+        <ChartCard title="Rutas más frecuentes" subtitle="Origen → destino, de la más a la menos usada" loading={loading} error={err} empty={noTrips} minHeight={120}>
+          {t && <RoutesTable routes={t.routes} />}
+        </ChartCard>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        {cards.map(card => (
-          <Grid key={card.title} size={{ xs: 12, sm: 6, lg: 3 }}>
-            {loadingSummary
-              ? <Skeleton variant="rounded" height={110} sx={{ borderRadius: '18px' }} />
-              : <StatCard {...card} />}
-          </Grid>
-        ))}
-      </Grid>
-
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Paper sx={{ ...cardSx, p: 3, height: '100%' }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1 }}>Por destino</Typography>
-            {byDestination.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">Sin recorridos en el rango seleccionado</Typography>
-            ) : (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Destino</TableCell>
-                    <TableCell align="right">Recorridos</TableCell>
-                    <TableCell align="right">Éxito</TableCell>
-                    <TableCell align="right">Tiempo promedio</TableCell>
-                    <TableCell align="right">Mediana</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {byDestination.map(d => (
-                    <TableRow key={`${d.building}|${d.roomName}`}>
-                      <TableCell>{`${d.building ?? '—'} · ${d.roomName}`}</TableCell>
-                      <TableCell align="right">{d.total}</TableCell>
-                      <TableCell align="right">{pct(d.arrived, d.finished)}</TableCell>
-                      <TableCell align="right">{fmtDuration(d.avgArrivalMs)}</TableCell>
-                      <TableCell align="right">{fmtDuration(d.medianArrivalMs)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Paper>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <ChartCard title="Destinos más buscados" loading={loading} error={err} empty={noTrips}>
+            {t && <BarList items={t.destinations.slice(0, 8).map(d => destinationItem(d))} />}
+          </ChartCard>
         </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Paper sx={{ ...cardSx, p: 3, height: '100%' }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 2 }}>Motivos de abandono</Typography>
-            {abandonReasons.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">Sin abandonos</Typography>
-            ) : abandonReasons.map(({ reason, count }) => (
-              <Box key={reason} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography sx={{ fontSize: '0.85rem' }}>{END_REASON_LABEL[reason] ?? reason}</Typography>
-                <Chip label={count} size="small" sx={{ fontWeight: 700 }} />
-              </Box>
-            ))}
-          </Paper>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <ChartCard title="Destinos menos usados" subtitle="Lugares con pocos recorridos en el periodo" loading={loading} error={err}
+            empty={!t || t.destinations.length <= 8} emptyText="Hay pocos destinos: todos aparecen en «más buscados»">
+            {t && <BarList color="#9CA3AF" items={t.destinations.slice(-5).reverse().map(d => destinationItem(d))} />}
+          </ChartCard>
+        </Grid>
+        <Grid size={{ xs: 12, md: 12, lg: 4 }}>
+          <ChartCard title="Donde menos llegan" subtitle="Menor tasa de llegada (mín. 3 recorridos terminados)" loading={loading} error={err}
+            empty={hardest.length === 0} emptyText="Aún no hay destinos con suficientes recorridos">
+            <BarList color="#EF4444" max={1}
+              items={hardest.map(d => ({
+                key: `${d.building}|${d.roomName}`, label: d.roomName, value: d.completionRate ?? 0,
+                display: `${fmtPercent(d.completionRate)} llegan · ${fmtNumber(d.arrived + d.abandoned)} terminados`,
+              }))} />
+          </ChartCard>
         </Grid>
       </Grid>
 
+      {/* ── Abandonos ── */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <ChartCard title="¿En qué etapa abandonan?" loading={loading} error={err}
+            empty={!t || t.abandonStages.length === 0} emptyText="Ningún recorrido abandonado">
+            {t && <BarList color="#EF4444" items={t.abandonStages.map(c => ({
+              key: c.key, label: ABANDON_STAGE_LABEL[c.key]?.label ?? c.key, value: c.count, hint: ABANDON_STAGE_LABEL[c.key]?.hint,
+            }))} />}
+          </ChartCard>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <ChartCard title="¿Cómo terminaron?" subtitle="Motivo de cierre de los abandonados" loading={loading} error={err}
+            empty={!t || t.abandonReasons.length === 0} emptyText="Ningún recorrido abandonado">
+            {t && <BarList color="#F59E0B" items={t.abandonReasons.map(c => ({
+              key: c.key, label: END_REASON_LABEL[c.key] ?? c.key, value: c.count,
+            }))} />}
+          </ChartCard>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <ChartCard title="¿Dónde estaban al empezar?" subtitle="Según el GPS al elegir el destino" loading={loading} error={err} empty={noTrips}>
+            {t && <BarList color="#6366F1" items={t.startModes.map(c => ({
+              key: c.key, label: START_MODE_LABEL[c.key] ?? c.key, value: c.count,
+            }))} />}
+          </ChartCard>
+        </Grid>
+      </Grid>
+
+      {/* ── Detalle ── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography component="h2" sx={{ fontWeight: 700, fontSize: '1.05rem' }}>Todos los recorridos</Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Detalle de cada recorrido del periodo, del más reciente al más antiguo.</Typography>
+        </Box>
+        <Button size="small" variant="outlined" startIcon={<DownloadRoundedIcon />} onClick={exportCsv} disabled={exporting}
+          sx={{ borderRadius: '8px', textTransform: 'none' }}>
+          {exporting ? 'Exportando…' : 'Exportar CSV'}
+        </Button>
+      </Box>
       <Box sx={{ ...cardSx, overflow: 'hidden', height: 520 }}>
         <DataGrid
           rows={tripPage?.content ?? []}
@@ -314,9 +339,64 @@ export default function TripsPage() {
           disableColumnSorting
           disableColumnFilter
           disableRowSelectionOnClick
+          localeText={{ noRowsLabel: 'Sin recorridos en este periodo' }}
           sx={{ border: 'none' }}
         />
       </Box>
     </Box>
   );
 }
+
+function destinationItem(d: Destination) {
+  return {
+    key: `${d.building}|${d.roomName}`,
+    label: `${d.roomName}${d.buildingLabel ? ` · ${d.buildingLabel}` : ''}`,
+    value: d.total,
+    display: `${fmtNumber(d.total)} · ${fmtPercent(d.completionRate)} llegan`,
+    hint: `Tiempo típico: ${fmtDurationLong(d.medianDurationMs)} · distancia media ${fmtMetersLong(d.avgRouteM)}`,
+  };
+}
+
+function RoutesTable({ routes }: { routes: TripAnalytics['routes'] }) {
+  const [showAll, setShowAll] = useState(false);
+  const rows = showAll ? routes : routes.slice(0, 8);
+  return (
+    <Box sx={{ overflowX: 'auto' }}>
+      <Table size="small" aria-label="Rutas más frecuentes">
+        <TableHead>
+          <TableRow>
+            <TableCell>Ruta</TableCell>
+            <TableCell align="right">Recorridos</TableCell>
+            <TableCell align="right">Llegaron</TableCell>
+            <TableCell align="right">Tiempo típico</TableCell>
+            <TableCell align="right">Distancia media</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map(r => (
+            <TableRow key={`${r.origin}|${r.building}|${r.destination}`} hover>
+              <TableCell>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Chip size="small" label={r.origin} sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 600 }} />
+                  <EastRoundedIcon sx={{ fontSize: 16, color: 'text.disabled' }} aria-label="hacia" />
+                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{r.destination}</Typography>
+                  {r.building && <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{r.building}</Typography>}
+                </Box>
+              </TableCell>
+              <TableCell align="right">{fmtNumber(r.total)}</TableCell>
+              <TableCell align="right">{fmtPercent(r.total ? r.arrived / r.total : null)}</TableCell>
+              <TableCell align="right">{fmtDurationLong(r.medianDurationMs)}</TableCell>
+              <TableCell align="right">{fmtMetersLong(r.avgRouteM)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {routes.length > 8 && (
+        <Button size="small" onClick={() => setShowAll(v => !v)} sx={{ mt: 1 }}>
+          {showAll ? 'Ver menos' : `Ver las ${routes.length} rutas`}
+        </Button>
+      )}
+    </Box>
+  );
+}
+

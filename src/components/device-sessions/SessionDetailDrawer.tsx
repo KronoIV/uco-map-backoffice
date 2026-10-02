@@ -4,9 +4,21 @@ import {
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import type { DeviceSession } from '../../types';
+import { PERMISSION_LABEL, fmtDuration } from '../../utils/analyticsFormat';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min
 const TODAY_MS = 24 * 60 * 60 * 1000;
+
+const PERMISSION_STATE: Record<string, { label: string; color: string }> = {
+  granted: { label: 'Concedido', color: '#047857' },
+  'not-required': { label: 'No lo pide', color: '#6B7280' },
+  prompt: { label: 'Sin responder', color: '#6B7280' },
+  unknown: { label: 'Sin responder', color: '#6B7280' },
+  error: { label: 'Sin responder', color: '#6B7280' },
+  denied: { label: 'Rechazado', color: '#B45309' },
+  blocked: { label: 'Bloqueado', color: '#B91C1C' },
+  unavailable: { label: 'No disponible', color: '#6B7280' },
+};
 
 function fmtDate(iso?: string) {
   if (!iso) return '—';
@@ -14,17 +26,6 @@ function fmtDate(iso?: string) {
     day: '2-digit', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
-}
-
-function fmtDuration(firstSeen: string, lastSeen: string) {
-  const ms = new Date(lastSeen).getTime() - new Date(firstSeen).getTime();
-  if (ms < 0) return '—';
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  const s = Math.floor((ms % 60_000) / 1_000);
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
 }
 
 function statusChip(lastSeen: string) {
@@ -159,22 +160,61 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
         >
           <Box sx={{ flex: 1, textAlign: 'center' }}>
             <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#00d084', lineHeight: 1 }}>
+              {session.visitCount ? session.visitCount : '—'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Visitas
+            </Typography>
+          </Box>
+          <Divider orientation="vertical" flexItem />
+          <Tooltip title="Suma del tiempo con la app en pantalla y en uso en todas sus visitas" arrow>
+            <Box sx={{ flex: 1, textAlign: 'center' }}>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}>
+                {session.visitCount ? fmtDuration(session.totalActiveMs ?? 0) : '—'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Tiempo de uso
+              </Typography>
+            </Box>
+          </Tooltip>
+          <Divider orientation="vertical" flexItem />
+          <Box sx={{ flex: 1, textAlign: 'center' }}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}>
               {session.sessionCount}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Pings
             </Typography>
           </Box>
-          <Divider orientation="vertical" flexItem />
-          <Box sx={{ flex: 1, textAlign: 'center' }}>
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.2 }}>
-              {fmtDuration(session.firstSeen, session.lastSeen)}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Tiempo activo
-            </Typography>
-          </Box>
         </Box>
+        {!session.visitCount && (
+          <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: -1, mb: 2 }}>
+            Este dispositivo solo usó versiones anteriores a la 2.1: no hay visitas ni tiempo de uso medidos.
+          </Typography>
+        )}
+
+        {session.permissions && (
+          <>
+            <Typography
+              sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}
+            >
+              Permisos (último estado)
+            </Typography>
+            {(['camera', 'location', 'motion'] as const).map(k => {
+              const state = session.permissions?.[k];
+              const info = state ? PERMISSION_STATE[state] : undefined;
+              return (
+                <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: '6px', borderBottom: '1px solid #F9FAFB' }}>
+                  <Typography sx={{ fontSize: '0.8rem' }}>{PERMISSION_LABEL[k]}</Typography>
+                  <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: info?.color ?? 'text.secondary' }}>
+                    {info?.label ?? 'Sin dato'}
+                  </Typography>
+                </Box>
+              );
+            })}
+            <Divider sx={{ my: 2 }} />
+          </>
+        )}
 
         {/* Device info */}
         <Typography
