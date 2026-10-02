@@ -100,7 +100,6 @@ export default function AnalyticsDashboard() {
 
       {overview.isFetching && !loading && <LinearProgress sx={{ mb: 2, borderRadius: 2 }} aria-label="Actualizando" />}
       {overview.error && <Alert severity="error" sx={{ mb: 2 }}>No se pudo cargar la analítica. Revisa la conexión con el servidor e inténtalo de nuevo.</Alert>}
-      {d && <CoverageNotice overview={d} />}
 
       {/* ── Resumen ─────────────────────────────── */}
       <Section id="resumen" title="Resumen" description={`${period.label}. Cada cifra se compara con ${pl}.`}>
@@ -476,19 +475,7 @@ function ProblemsBlock({ overview: d, loading, error }: { overview?: AnalyticsOv
   );
 }
 
-// ── Avisos y lectura rápida ──────────────────────────
 
-function CoverageNotice({ overview: d }: { overview: AnalyticsOverview }) {
-  const since = d.coverage.sessionsSince;
-  if (since && new Date(since) <= new Date(d.period.from)) return null;
-  return (
-    <Alert severity="info" sx={{ mb: 2.5, borderRadius: '12px' }}>
-      {since
-        ? <>Las visitas, el tiempo de uso, las funciones y los permisos se miden desde el <strong>{new Date(since).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</strong> (versión 2.1 de la app). Antes solo hay datos de dispositivos y recorridos.</>
-        : <>Las visitas, el tiempo de uso, las funciones y los permisos se empezarán a medir cuando los usuarios abran la versión 2.1 de la app. Por ahora se muestran los datos de dispositivos y recorridos.</>}
-    </Alert>
-  );
-}
 
 function buildInsights(d: AnalyticsOverview, topDestination?: string): string[] {
   const out: string[] = [];
