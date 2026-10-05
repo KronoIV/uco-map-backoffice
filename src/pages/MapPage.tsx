@@ -20,11 +20,12 @@ import GridOnRoundedIcon from '@mui/icons-material/GridOnRounded';
 import SatelliteAltRoundedIcon from '@mui/icons-material/SatelliteAltRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
 import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
+import DoorFrontRoundedIcon from '@mui/icons-material/DoorFrontRounded';
 import { useSearchParams } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import { graphService } from '../services/graphService';
 import { roomService } from '../services/roomService';
-import type { GraphNode, GraphEdge } from '../types';
+import type { GraphNode, GraphEdge, NodeType } from '../types';
 import PageHeader from '../components/PageHeader';
 import SectionTabs, { type SectionTab } from '../components/SectionTabs';
 import PoiEditorPage from './PoiEditorPage';
@@ -52,16 +53,123 @@ function makeIcon(color: string, borderColor: string, size: number, ring = false
   });
 }
 
-const icons: Record<string, L.DivIcon> = {
-  BUILDING: makeIcon('#00d084', '#004628', 18),
-  ENTRANCE: makeIcon('#3B82F6', '#1E40AF', 14),
-  WAYPOINT: makeIcon('#9CA3AF', '#6B7280', 11),
+const NODE_TYPE_META: Record<NodeType, { label: string; color: string; border: string; size: number }> = {
+  BUILDING: { label: 'Edificio', color: '#00d084', border: '#004628', size: 18 },
+  DOOR: { label: 'Puerta de edificio', color: '#8B5CF6', border: '#5B21B6', size: 14 },
+  ENTRANCE: { label: 'Entrada al campus', color: '#3B82F6', border: '#1E40AF', size: 14 },
+  WAYPOINT: { label: 'Waypoint', color: '#9CA3AF', border: '#6B7280', size: 11 },
 };
+const NODE_TYPES = Object.keys(NODE_TYPE_META) as NodeType[];
+
+const icons = Object.fromEntries(
+  NODE_TYPES.map(t => [t, makeIcon(NODE_TYPE_META[t].color, NODE_TYPE_META[t].border, NODE_TYPE_META[t].size)]),
+) as Record<NodeType, L.DivIcon>;
 
 const selectedIcon = makeIcon('#F59E0B', '#D97706', 18, true);
 const highlightIcon = makeIcon('#EC4899', '#BE185D', 16, true);
 
-type Mode = 'view' | 'add-node' | 'add-edge' | 'move';
+type Mode = 'view' | 'add-node' | 'add-edge' | 'door' | 'move';
+
+const neighborsOf = (nodeId: string, nodes: GraphNode[], edges: GraphEdge[]) =>
+  edges
+    .map(e => (e.nodeA === nodeId ? e.nodeB : e.nodeB === nodeId ? e.nodeA : null))
+    .map(id => nodes.find(n => n.nodeId === id))
+    .filter((n): n is GraphNode => !!n);
+
+/** Lo que la app necesita de una puerta: un edificio y al menos un camino conectados. */
+function doorStatus(node: GraphNode, nodes: GraphNode[], edges: GraphEdge[]) {
+  const near = neighborsOf(node.nodeId, nodes, edges);
+  const building = near.find(n => n.nodeType === 'BUILDING');
+  const paths = near.filter(n => n.nodeType !== 'BUILDING').length;
+  if (!building) return { ok: false, text: 'Conéctala al nodo del edificio (modo Ruta)' };
+  if (paths === 0) return { ok: false, text: `Puerta de ${building.label ?? building.nodeId}: conéctala también a un camino` };
+  return { ok: true, text: `Puerta de ${building.label ?? building.nodeId}` };
+}
+
+function NodePopup({
+  node,
+  nodes,
+  edges,
+  onChangeType,
+  onRename,
+  onDelete,
+}: {
+  node: GraphNode;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  onChangeType: (nodeId: string, type: NodeType) => void;
+  onRename: (nodeId: string, label: string) => void;
+  onDelete: (nodeId: string) => void;
+}) {
+  const doors = node.nodeType === 'BUILDING'
+    ? neighborsOf(node.nodeId, nodes, edges).filter(n => n.nodeType === 'DOOR').length
+    : 0;
+  const status = node.nodeType === 'DOOR' ? doorStatus(node, nodes, edges) : null;
+  const save = (value: string) => {
+    const label = value.trim();
+    if (label !== (node.label ?? '')) onRename(node.nodeId, label);
+  };
+
+  return (
+    <Box sx={{ minWidth: 220 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', mb: 1, fontFamily: 'monospace' }}>
+        {node.nodeId}
+      </Typography>
+      <TextField
+        key={`${node.nodeId}-${node.label ?? ''}`}
+        size="small"
+        fullWidth
+        label="Nombre"
+        defaultValue={node.label ?? ''}
+        placeholder={node.nodeType === 'DOOR' ? 'Puerta principal COLEGIO' : ''}
+        onBlur={e => save(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        sx={{ mb: 1, '& input': { fontSize: '0.78rem' } }}
+      />
+      <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary', mb: 0.5 }}>Tipo</Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+        {NODE_TYPES.map(t => (
+          <Chip
+            key={t}
+            label={NODE_TYPE_META[t].label}
+            size="small"
+            onClick={() => t !== node.nodeType && onChangeType(node.nodeId, t)}
+            sx={{
+              fontSize: '0.65rem',
+              bgcolor: t === node.nodeType ? NODE_TYPE_META[t].color : '#F3F4F6',
+              color: t === node.nodeType ? '#fff' : '#374151',
+              fontWeight: t === node.nodeType ? 700 : 500,
+            }}
+          />
+        ))}
+      </Box>
+      {status && (
+        <Alert severity={status.ok ? 'success' : 'warning'} sx={{ py: 0, mb: 1, fontSize: '0.7rem', '& .MuiAlert-icon': { fontSize: 16 } }}>
+          {status.text}
+        </Alert>
+      )}
+      {node.nodeType === 'BUILDING' && (
+        <Alert severity={doors > 0 ? 'success' : 'info'} sx={{ py: 0, mb: 1, fontSize: '0.7rem', '& .MuiAlert-icon': { fontSize: 16 } }}>
+          {doors > 0
+            ? `${doors} puerta${doors > 1 ? 's' : ''}: la ruta termina en la más conveniente`
+            : 'Sin puertas: la ruta termina en este punto. Usa el modo Puertas.'}
+        </Alert>
+      )}
+      <Box sx={{ fontSize: '0.7rem', color: '#6B7280', mb: 1, fontFamily: 'monospace' }}>
+        {node.gps.lat.toFixed(6)}, {node.gps.lng.toFixed(6)}
+      </Box>
+      <Button
+        size="small"
+        variant="outlined"
+        color="error"
+        onClick={() => onDelete(node.nodeId)}
+        sx={{ fontSize: '0.65rem', height: 24, px: 1, minWidth: 0 }}
+      >
+        Eliminar
+      </Button>
+    </Box>
+  );
+}
 
 // ── Inner component that lives inside MapContainer ──────────────
 function MapInteraction({
@@ -73,8 +181,10 @@ function MapInteraction({
   onMapClick,
   onMarkerClick,
   onMarkerDragEnd,
-  onDeleteEdge,
+  onEdgeClick,
   onDeleteNode,
+  onChangeType,
+  onRename,
 }: {
   mode: Mode;
   nodes: GraphNode[];
@@ -84,8 +194,10 @@ function MapInteraction({
   onMapClick: (lat: number, lng: number) => void;
   onMarkerClick: (nodeId: string) => void;
   onMarkerDragEnd: (nodeId: string, lat: number, lng: number) => void;
-  onDeleteEdge: (edge: GraphEdge) => void;
+  onEdgeClick: (edge: GraphEdge, lat: number, lng: number) => void;
   onDeleteNode: (nodeId: string) => void;
+  onChangeType: (nodeId: string, type: NodeType) => void;
+  onRename: (nodeId: string, label: string) => void;
 }) {
   const [cursorPos, setCursorPos] = useState<[number, number] | null>(null);
 
@@ -124,14 +236,23 @@ function MapInteraction({
   return (
     <>
       {/* Permanent edges */}
-      {polylines.map(({ edge, positions }) => (
-        <Polyline
-          key={edge.id}
-          positions={positions}
-          pathOptions={{ color: '#00d084', weight: 3, opacity: 0.85 }}
-          eventHandlers={{ click: () => onDeleteEdge(edge) }}
-        />
-      ))}
+      {polylines.map(({ edge, positions }) => {
+        // En modo Puertas se resaltan los caminos que llegan a un edificio: ahí se marca la puerta
+        const toBuilding = mode === 'door' && [edge.nodeA, edge.nodeB]
+          .some(id => nodes.find(n => n.nodeId === id)?.nodeType === 'BUILDING');
+        return (
+          <Polyline
+            key={edge.id}
+            positions={positions}
+            pathOptions={{
+              color: toBuilding ? '#8B5CF6' : '#00d084',
+              weight: toBuilding ? 6 : 3,
+              opacity: mode === 'door' && !toBuilding ? 0.35 : 0.85,
+            }}
+            eventHandlers={{ click: e => onEdgeClick(edge, e.latlng.lat, e.latlng.lng) }}
+          />
+        );
+      })}
 
       {/* Live preview line: anchor → cursor (works in add-edge AND add-node modes) */}
       {nodeAPos && cursorPos && (
@@ -177,29 +298,14 @@ function MapInteraction({
             }}
           >
             <Popup>
-              <Box sx={{ minWidth: 150 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', mb: 0.5 }}>
-                  {node.nodeId}
-                </Typography>
-                {node.label && (
-                  <Typography sx={{ fontSize: '0.75rem', mb: 0.5, color: '#374151' }}>
-                    {node.label}
-                  </Typography>
-                )}
-                <Chip label={node.nodeType} size="small" sx={{ mb: 1, fontSize: '0.65rem' }} />
-                <Box sx={{ fontSize: '0.7rem', color: '#6B7280', mb: 1, fontFamily: 'monospace' }}>
-                  {node.gps.lat.toFixed(6)}, {node.gps.lng.toFixed(6)}
-                </Box>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="error"
-                  onClick={() => onDeleteNode(node.nodeId)}
-                  sx={{ fontSize: '0.65rem', height: 24, px: 1, minWidth: 0 }}
-                >
-                  Eliminar
-                </Button>
-              </Box>
+              <NodePopup
+                node={node}
+                nodes={nodes}
+                edges={edges}
+                onChangeType={onChangeType}
+                onRename={onRename}
+                onDelete={onDeleteNode}
+              />
             </Popup>
           </Marker>
         );
@@ -673,6 +779,7 @@ const RENDER_H = 800;
 
 const NODE_COLORS: Record<string, { bg: string; border: string; size: number }> = {
   BUILDING: { bg: '#00d084', border: '#004628', size: 14 },
+  DOOR: { bg: '#8B5CF6', border: '#5B21B6', size: 11 },
   ENTRANCE: { bg: '#3B82F6', border: '#1E40AF', size: 12 },
   WAYPOINT: { bg: '#9CA3AF', border: '#6B7280', size: 9 },
 };
@@ -928,7 +1035,7 @@ function PixelMapEditor({
             <Box key={type} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.75 }}>
               <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: bg, border: `2px solid ${border}`, flexShrink: 0 }} />
               <Typography variant="body2" color="text.secondary">
-                {type === 'BUILDING' ? 'Edificio' : type === 'ENTRANCE' ? 'Entrada' : 'Waypoint'}
+                {NODE_TYPE_META[type as NodeType]?.label ?? type}
               </Typography>
             </Box>
           ))}
@@ -1012,6 +1119,8 @@ export default function MapPage() {
   // Last placed node in add-node mode — used for auto-chaining
   const [chainNodeId, setChainNodeId] = useState<string | null>(null);
   const [deleteEdgeConfirm, setDeleteEdgeConfirm] = useState<GraphEdge | null>(null);
+  const [doorNotice, setDoorNotice] = useState<string | null>(null);
+  const [splitting, setSplitting] = useState(false);
   // Local node positions override (for real-time drag feedback before save)
   const localPositions = useRef<Record<string, { lat: number; lng: number }>>({});
   const [, forceRender] = useState(0);
@@ -1096,12 +1205,82 @@ export default function MapPage() {
       setChainNodeId(nodeId);
       return;
     }
+    if (mode === 'door') {
+      const node = rawNodes.find(n => n.nodeId === nodeId);
+      if (node?.nodeType === 'WAYPOINT') handleChangeType(nodeId, 'DOOR');
+      else if (node?.nodeType === 'DOOR') handleChangeType(nodeId, 'WAYPOINT');
+      else setDoorNotice('Solo los waypoints se convierten en puerta (y una puerta vuelve a waypoint)');
+      return;
+    }
     if (mode !== 'add-edge') return;
     if (!edgeNodeA) {
       setEdgeNodeA(nodeId);
     } else if (edgeNodeA !== nodeId) {
       createEdgeMutation.mutate({ nodeA: edgeNodeA, nodeB: nodeId, active: true });
     }
+  };
+
+  const handleChangeType = (nodeId: string, nodeType: NodeType) => {
+    const node = rawNodes.find(n => n.nodeId === nodeId);
+    if (!node) return;
+    const building = neighborsOf(nodeId, rawNodes, edges).find(n => n.nodeType === 'BUILDING');
+    // Una puerta sin nombre toma el de su edificio para reconocerla en la lista
+    const label = nodeType === 'DOOR' && !node.label && building ? `Puerta ${building.label ?? building.nodeId}` : node.label;
+    updateNodeMutation.mutate({ id: nodeId, data: { ...node, nodeType, label } });
+  };
+
+  const handleRename = (nodeId: string, label: string) => {
+    const node = rawNodes.find(n => n.nodeId === nodeId);
+    if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, label: label || undefined } });
+  };
+
+  /** Clic sobre el camino que llega a un edificio, donde cruza la fachada: inserta ahí una puerta. */
+  const splitEdgeWithDoor = async (edge: GraphEdge, lat: number, lng: number) => {
+    const a = rawNodes.find(n => n.nodeId === edge.nodeA);
+    const b = rawNodes.find(n => n.nodeId === edge.nodeB);
+    if (!a?.gps || !b?.gps) return;
+    const building = [a, b].find(n => n.nodeType === 'BUILDING');
+    if (!building) {
+      setDoorNotice('Haz clic en un camino que llegue a un edificio (resaltados en morado)');
+      return;
+    }
+    // Proyección del clic sobre la arista (plano local, preciso a escala de campus)
+    const kx = Math.cos((a.gps.lat * Math.PI) / 180);
+    const bx = (b.gps.lng - a.gps.lng) * kx;
+    const by = b.gps.lat - a.gps.lat;
+    const len2 = bx * bx + by * by;
+    const t = len2 > 0 ? Math.max(0.05, Math.min(0.95, (((lng - a.gps.lng) * kx) * bx + (lat - a.gps.lat) * by) / len2)) : 0.5;
+    const lerp = (p: number, q: number) => p + (q - p) * t;
+    const nodeId = `D${Date.now().toString().slice(-5)}`;
+    setSplitting(true);
+    try {
+      await graphService.createNode({
+        nodeId,
+        gps: { lat: lerp(a.gps.lat, b.gps.lat), lng: lerp(a.gps.lng, b.gps.lng) },
+        pixel: { x: Math.round(lerp(a.pixel?.x ?? 0, b.pixel?.x ?? 0)), y: Math.round(lerp(a.pixel?.y ?? 0, b.pixel?.y ?? 0)) },
+        label: `Puerta ${building.label ?? building.nodeId}`,
+        nodeType: 'DOOR',
+        active: true,
+      });
+      await graphService.createEdge({ nodeA: edge.nodeA, nodeB: nodeId, active: true });
+      await graphService.createEdge({ nodeA: nodeId, nodeB: edge.nodeB, active: true });
+      await graphService.deleteEdge(edge.id);
+      setDoorNotice(`Puerta ${nodeId} creada. Arrástrala en modo Mover si no quedó justo en la fachada.`);
+    } catch {
+      setDoorNotice('No se pudo crear la puerta. Revisa la conexión e inténtalo de nuevo.');
+    } finally {
+      setSplitting(false);
+      qc.invalidateQueries({ queryKey: ['nodes'] });
+      qc.invalidateQueries({ queryKey: ['edges'] });
+    }
+  };
+
+  const handleEdgeClick = (edge: GraphEdge, lat: number, lng: number) => {
+    if (mode === 'door') {
+      if (!splitting) void splitEdgeWithDoor(edge, lat, lng);
+      return;
+    }
+    setDeleteEdgeConfirm(edge);
   };
 
   const handleMarkerDragEnd = (nodeId: string, lat: number, lng: number) => {
@@ -1120,6 +1299,7 @@ export default function MapPage() {
     setMode(val);
     setEdgeNodeA(null);
     setChainNodeId(null);
+    setDoorNotice(null);
   };
 
   const handleBreakChain = () => setChainNodeId(null);
@@ -1147,6 +1327,9 @@ export default function MapPage() {
     'add-edge': edgeNodeA
       ? `Nodo origen: ${edgeNodeA} — ahora haz click en el destino`
       : 'Haz click en el nodo origen de la ruta',
+    door: splitting
+      ? 'Creando la puerta…'
+      : doorNotice ?? 'Clic en un camino morado justo donde cruza la fachada para crear la puerta · clic en un waypoint lo convierte en puerta',
     move: 'Arrastra cualquier marcador para reposicionarlo',
   };
 
@@ -1154,8 +1337,19 @@ export default function MapPage() {
     view: 'info',
     'add-node': 'info',
     'add-edge': edgeNodeA ? 'warning' : 'info',
+    door: doorNotice && !doorNotice.startsWith('Puerta ') ? 'warning' : doorNotice ? 'success' : 'info',
     move: 'success',
   };
+
+  // Lo que la app necesita para detectar la entrada con precisión: cada edificio con sus puertas bien conectadas
+  const doorChecklist = nodes
+    .filter(n => n.nodeType === 'BUILDING')
+    .map(b => {
+      const doors = neighborsOf(b.nodeId, nodes, edges).filter(n => n.nodeType === 'DOOR');
+      const broken = doors.filter(d => !doorStatus(d, nodes, edges).ok).length;
+      return { id: b.nodeId, label: b.label ?? b.nodeId, doors: doors.length, broken };
+    });
+  const orphanDoors = nodes.filter(n => n.nodeType === 'DOOR' && !doorStatus(n, nodes, edges).ok);
 
   return (
     <Box sx={{ height: 'calc(100vh - 64px - 48px)', display: 'flex', flexDirection: 'column' }}>
@@ -1233,6 +1427,10 @@ export default function MapPage() {
               <ToggleButton value="add-edge">
                 <AltRouteRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
                 Ruta
+              </ToggleButton>
+              <ToggleButton value="door">
+                <DoorFrontRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
+                Puertas
               </ToggleButton>
               <ToggleButton value="move">
                 <OpenWithRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
@@ -1320,8 +1518,10 @@ export default function MapPage() {
               onMapClick={handleMapClick}
               onMarkerClick={handleMarkerClick}
               onMarkerDragEnd={handleMarkerDragEnd}
-              onDeleteEdge={setDeleteEdgeConfirm}
+              onEdgeClick={handleEdgeClick}
               onDeleteNode={id => deleteNodeMutation.mutate(id)}
+              onChangeType={handleChangeType}
+              onRename={handleRename}
             />
           </MapContainer>
         </Box>
@@ -1369,9 +1569,7 @@ export default function MapPage() {
               Leyenda
             </Typography>
             {[
-              { color: '#00d084', border: '#004628', label: 'Edificio' },
-              { color: '#3B82F6', border: '#1E40AF', label: 'Entrada' },
-              { color: '#9CA3AF', border: '#6B7280', label: 'Waypoint' },
+              ...NODE_TYPES.map(t => ({ color: NODE_TYPE_META[t].color, border: NODE_TYPE_META[t].border, label: NODE_TYPE_META[t].label })),
               { color: '#F59E0B', border: '#D97706', label: 'Seleccionado' },
               { color: '#EC4899', border: '#BE185D', label: 'Ya conectado' },
             ].map(item => (
@@ -1396,6 +1594,35 @@ export default function MapPage() {
               <Box sx={{ width: 24, height: 2, borderTop: '2px dashed #F59E0B', flexShrink: 0 }} />
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>Vista previa</Typography>
             </Box>
+          </Box>
+
+          {/* Door checklist */}
+          <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1', maxHeight: 220, overflowY: 'auto' }}>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.8rem', mb: 0.5, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Puertas por edificio
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              La app detecta la entrada y termina la ruta en estas puertas
+            </Typography>
+            {doorChecklist.map(b => (
+              <Box key={b.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ fontSize: '0.78rem' }}>{b.label}</Typography>
+                <Chip
+                  size="small"
+                  label={b.doors === 0 ? 'Sin puertas' : b.broken > 0 ? `${b.broken} sin conectar` : `${b.doors} puerta${b.doors > 1 ? 's' : ''}`}
+                  sx={{
+                    fontSize: '0.65rem', height: 20,
+                    bgcolor: b.doors === 0 || b.broken > 0 ? '#FEF3C7' : '#EDE9FE',
+                    color: b.doors === 0 || b.broken > 0 ? '#92400E' : '#5B21B6',
+                  }}
+                />
+              </Box>
+            ))}
+            {orphanDoors.length > 0 && (
+              <Alert severity="warning" sx={{ mt: 1, py: 0, fontSize: '0.7rem' }}>
+                Puertas sin edificio o sin camino: {orphanDoors.map(d => d.nodeId).join(', ')}
+              </Alert>
+            )}
           </Box>
 
           {/* Edge list */}

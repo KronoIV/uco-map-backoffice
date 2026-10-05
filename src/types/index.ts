@@ -24,7 +24,8 @@ export interface PixelPoint {
 }
 
 // ──────────────── Graph ───────────────────────────────────────
-export type NodeType = 'BUILDING' | 'ENTRANCE' | 'WAYPOINT';
+/** DOOR: puerta de un edificio sobre la fachada, conectada a su nodo BUILDING (ahí termina la ruta exterior). */
+export type NodeType = 'BUILDING' | 'DOOR' | 'ENTRANCE' | 'WAYPOINT';
 
 export interface GraphNode {
   nodeId: string;
