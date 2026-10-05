@@ -204,7 +204,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{isEdit ? 'Editar salón' : 'Nuevo salón'}</DialogTitle>
+      <DialogTitle>{isEdit ? 'Editar lugar' : 'Nuevo lugar'}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <Box sx={{ display: 'flex', gap: 2 }}>
@@ -249,15 +249,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
             render={({ field }) => (
               <TextField {...field} label="State ID (clip AR)" fullWidth
                 error={!!errors.stateId}
-                helperText={errors.stateId?.message ?? 'Corresponde al nombre del clip en Zappar'}
                 placeholder="room_205, library..." />
-            )}
-          />
-          <Controller
-            name="modelUrl"
-            control={control}
-            render={({ field }) => (
-              <TextField {...field} label="URL del modelo 3D (opcional)" fullWidth placeholder="https://..." />
             )}
           />
           {mutError && (
@@ -483,7 +475,7 @@ function RoomsTab() {
           startIcon={<AddRoundedIcon />}
           onClick={() => { setEditRoom(null); setDialogOpen(true); }}
         >
-          Nuevo salón
+          Nuevo lugar
         </Button>
       </Box>
 
