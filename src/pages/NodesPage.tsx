@@ -22,9 +22,9 @@ const NODE_TYPES: NodeType[] = ['BUILDING', 'DOOR', 'ENTRANCE', 'WAYPOINT'];
 
 const typeConfig: Record<NodeType, { label: string; bg: string; color: string }> = {
   BUILDING: { label: 'Edificio', bg: '#FEF3C7', color: '#92400E' },
-  DOOR: { label: 'Puerta de edificio', bg: '#EDE9FE', color: '#5B21B6' },
+  DOOR: { label: 'Entrada de edificio', bg: '#EDE9FE', color: '#5B21B6' },
   ENTRANCE: { label: 'Entrada al campus', bg: '#DBEAFE', color: '#1E40AF' },
-  WAYPOINT: { label: 'Waypoint', bg: '#F3F4F6', color: '#374151' },
+  WAYPOINT: { label: 'Punto de camino', bg: '#F3F4F6', color: '#374151' },
 };
 
 interface NodeFormData {

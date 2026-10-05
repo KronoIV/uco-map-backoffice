@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, Popup, useMap, Tooltip as MapTooltip } from 'react-leaflet';
 import L from 'leaflet';
 import {
-  Box, Paper, Typography, Button, Chip, ToggleButton, ToggleButtonGroup,
+  Box, Paper, Typography, Button, Chip,
   List, ListItem, ListItemText, Tooltip, IconButton, Alert,
   TextField, MenuItem, Divider,
 } from '@mui/material';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import AltRouteRoundedIcon from '@mui/icons-material/AltRouteRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
-import OpenWithRoundedIcon from '@mui/icons-material/OpenWithRounded';
-import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import NavigationRoundedIcon from '@mui/icons-material/NavigationRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DirectionsWalkRoundedIcon from '@mui/icons-material/DirectionsWalkRounded';
@@ -53,11 +53,11 @@ function makeIcon(color: string, borderColor: string, size: number, ring = false
   });
 }
 
-const NODE_TYPE_META: Record<NodeType, { label: string; color: string; border: string; size: number }> = {
-  BUILDING: { label: 'Edificio', color: '#00d084', border: '#004628', size: 18 },
-  DOOR: { label: 'Puerta de edificio', color: '#8B5CF6', border: '#5B21B6', size: 14 },
-  ENTRANCE: { label: 'Entrada al campus', color: '#3B82F6', border: '#1E40AF', size: 14 },
-  WAYPOINT: { label: 'Waypoint', color: '#9CA3AF', border: '#6B7280', size: 11 },
+const NODE_TYPE_META: Record<NodeType, { label: string; help: string; color: string; border: string; size: number }> = {
+  WAYPOINT: { label: 'Punto de camino', help: 'Curva o cruce de un sendero', color: '#9CA3AF', border: '#6B7280', size: 11 },
+  DOOR: { label: 'Entrada de edificio', help: 'Por donde se entra; va sobre la fachada', color: '#8B5CF6', border: '#5B21B6', size: 14 },
+  BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: '#00d084', border: '#004628', size: 18 },
+  ENTRANCE: { label: 'Entrada al campus', help: 'Portería o acceso desde la calle', color: '#3B82F6', border: '#1E40AF', size: 14 },
 };
 const NODE_TYPES = Object.keys(NODE_TYPE_META) as NodeType[];
 
@@ -66,44 +66,124 @@ const icons = Object.fromEntries(
 ) as Record<NodeType, L.DivIcon>;
 
 const selectedIcon = makeIcon('#F59E0B', '#D97706', 18, true);
-const highlightIcon = makeIcon('#EC4899', '#BE185D', 16, true);
 
-type Mode = 'view' | 'add-node' | 'add-edge' | 'door' | 'move';
+type Selection =
+  | { kind: 'node'; id: string }
+  | { kind: 'edge'; id: string; lat: number; lng: number }
+  | null;
+/** Dibujando un camino: `from` es el último punto (null hasta el primer clic). */
+type Drawing = { from: string | null } | null;
+type Notice = { text: string; severity: 'success' | 'info' | 'warning' };
 
-const neighborsOf = (nodeId: string, nodes: GraphNode[], edges: GraphEdge[]) =>
-  edges
-    .map(e => (e.nodeA === nodeId ? e.nodeB : e.nodeB === nodeId ? e.nodeA : null))
-    .map(id => nodes.find(n => n.nodeId === id))
-    .filter((n): n is GraphNode => !!n);
+const nodeName = (n: GraphNode | undefined) => n?.label || n?.nodeId || '?';
 
-/** Lo que la app necesita de una puerta: un edificio y al menos un camino conectados. */
+const neighborsOf = (nodeId: string, nodes: GraphNode[], edges: GraphEdge[]) => {
+  const found = new Map<string, GraphNode>();
+  for (const e of edges) {
+    const other = e.nodeA === nodeId ? e.nodeB : e.nodeB === nodeId ? e.nodeA : null;
+    const n = other ? nodes.find(x => x.nodeId === other) : undefined;
+    if (n) found.set(n.nodeId, n);
+  }
+  return [...found.values()];
+};
+
+/** Posición (0–1) del clic a lo largo de la arista, sin pegarse a los extremos. */
+function projectOnEdge(a: { lat: number; lng: number }, b: { lat: number; lng: number }, lat: number, lng: number) {
+  const kx = Math.cos((a.lat * Math.PI) / 180);
+  const bx = (b.lng - a.lng) * kx;
+  const by = b.lat - a.lat;
+  const len2 = bx * bx + by * by;
+  if (len2 === 0) return 0.5;
+  return Math.max(0.05, Math.min(0.95, (((lng - a.lng) * kx) * bx + (lat - a.lat) * by) / len2));
+}
+
+/** Lo que la app necesita de una entrada: un edificio y al menos un camino conectados. */
 function doorStatus(node: GraphNode, nodes: GraphNode[], edges: GraphEdge[]) {
   const near = neighborsOf(node.nodeId, nodes, edges);
   const building = near.find(n => n.nodeType === 'BUILDING');
   const paths = near.filter(n => n.nodeType !== 'BUILDING').length;
-  if (!building) return { ok: false, text: 'Conéctala al nodo del edificio (modo Ruta)' };
-  if (paths === 0) return { ok: false, text: `Puerta de ${building.label ?? building.nodeId}: conéctala también a un camino` };
-  return { ok: true, text: `Puerta de ${building.label ?? building.nodeId}` };
+  if (!building) return { ok: false, text: 'Esta entrada no está unida a ningún edificio. Dibuja un camino desde ella hasta el edificio.' };
+  if (paths === 0) return { ok: false, text: `Entrada de ${nodeName(building)}: dibuja un camino desde ella hasta el sendero.` };
+  return { ok: true, text: `Entrada de ${nodeName(building)}` };
 }
 
-function NodePopup({
-  node,
-  nodes,
-  edges,
-  onChangeType,
-  onRename,
-  onDelete,
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em', mb: 0.75 }}>
+      {children}
+    </Typography>
+  );
+}
+
+function TypePicker({ value, onChange }: { value: NodeType; onChange: (t: NodeType) => void }) {
+  return (
+    <Box role="radiogroup" sx={{ display: 'grid', gap: 0.75 }}>
+      {NODE_TYPES.map(t => {
+        const m = NODE_TYPE_META[t];
+        const active = t === value;
+        return (
+          <Box
+            key={t}
+            role="radio"
+            aria-checked={active}
+            tabIndex={0}
+            onClick={() => !active && onChange(t)}
+            onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !active) onChange(t); }}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.25, p: 1, borderRadius: '10px',
+              cursor: active ? 'default' : 'pointer',
+              border: `1.5px solid ${active ? m.color : '#E5E7EB'}`,
+              bgcolor: active ? `${m.color}1A` : '#fff',
+              '&:hover': { borderColor: m.color },
+            }}
+          >
+            <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: m.color, border: `2px solid ${m.border}`, flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: '0.8rem', fontWeight: active ? 700 : 600, lineHeight: 1.3 }}>{m.label}</Typography>
+              <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', lineHeight: 1.3 }}>{m.help}</Typography>
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function ConfirmDelete({ label, onConfirm, disabled }: { label: string; onConfirm: () => void; disabled?: boolean }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <Button size="small" color="error" startIcon={<DeleteRoundedIcon />} disabled={disabled} onClick={() => setAsking(true)} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
+        {label}
+      </Button>
+    );
+  }
+  return (
+    <Box sx={{ display: 'flex', gap: 1 }}>
+      <Button size="small" variant="outlined" onClick={() => setAsking(false)} sx={{ flex: 1, textTransform: 'none' }}>Cancelar</Button>
+      <Button size="small" variant="contained" color="error" disabled={disabled} onClick={onConfirm} sx={{ flex: 1, textTransform: 'none' }}>Sí, eliminar</Button>
+    </Box>
+  );
+}
+
+const alertSx = { py: 0, fontSize: '0.75rem', borderRadius: '10px' };
+const pillSx = { textTransform: 'none', borderRadius: '100px', fontWeight: 600 } as const;
+
+function NodeDetails({
+  node, nodes, edges, busy, onRename, onChangeType, onDrawFrom, onDelete, onSelect,
 }: {
   node: GraphNode;
   nodes: GraphNode[];
   edges: GraphEdge[];
-  onChangeType: (nodeId: string, type: NodeType) => void;
+  busy: boolean;
   onRename: (nodeId: string, label: string) => void;
+  onChangeType: (nodeId: string, type: NodeType) => void;
+  onDrawFrom: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
+  onSelect: (nodeId: string) => void;
 }) {
-  const doors = node.nodeType === 'BUILDING'
-    ? neighborsOf(node.nodeId, nodes, edges).filter(n => n.nodeType === 'DOOR').length
-    : 0;
+  const near = neighborsOf(node.nodeId, nodes, edges);
+  const doors = near.filter(n => n.nodeType === 'DOOR').length;
   const status = node.nodeType === 'DOOR' ? doorStatus(node, nodes, edges) : null;
   const save = (value: string) => {
     const label = value.trim();
@@ -111,207 +191,214 @@ function NodePopup({
   };
 
   return (
-    <Box sx={{ minWidth: 220 }}>
-      <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', mb: 1, fontFamily: 'monospace' }}>
-        {node.nodeId}
-      </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <TextField
         key={`${node.nodeId}-${node.label ?? ''}`}
         size="small"
-        fullWidth
         label="Nombre"
         defaultValue={node.label ?? ''}
-        placeholder={node.nodeType === 'DOOR' ? 'Puerta principal COLEGIO' : ''}
+        placeholder={node.nodeType === 'DOOR' ? 'Entrada principal' : 'Opcional'}
+        helperText={`Identificador: ${node.nodeId}`}
         onBlur={e => save(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-        sx={{ mb: 1, '& input': { fontSize: '0.78rem' } }}
       />
-      <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary', mb: 0.5 }}>Tipo</Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-        {NODE_TYPES.map(t => (
-          <Chip
-            key={t}
-            label={NODE_TYPE_META[t].label}
-            size="small"
-            onClick={() => t !== node.nodeType && onChangeType(node.nodeId, t)}
-            sx={{
-              fontSize: '0.65rem',
-              bgcolor: t === node.nodeType ? NODE_TYPE_META[t].color : '#F3F4F6',
-              color: t === node.nodeType ? '#fff' : '#374151',
-              fontWeight: t === node.nodeType ? 700 : 500,
-            }}
-          />
-        ))}
+      <Box>
+        <SectionLabel>¿Qué es este punto?</SectionLabel>
+        <TypePicker value={node.nodeType} onChange={t => onChangeType(node.nodeId, t)} />
       </Box>
-      {status && (
-        <Alert severity={status.ok ? 'success' : 'warning'} sx={{ py: 0, mb: 1, fontSize: '0.7rem', '& .MuiAlert-icon': { fontSize: 16 } }}>
-          {status.text}
-        </Alert>
-      )}
+      {status && <Alert severity={status.ok ? 'success' : 'warning'} sx={alertSx}>{status.text}</Alert>}
       {node.nodeType === 'BUILDING' && (
-        <Alert severity={doors > 0 ? 'success' : 'info'} sx={{ py: 0, mb: 1, fontSize: '0.7rem', '& .MuiAlert-icon': { fontSize: 16 } }}>
+        <Alert severity={doors > 0 ? 'success' : 'info'} sx={alertSx}>
           {doors > 0
-            ? `${doors} puerta${doors > 1 ? 's' : ''}: la ruta termina en la más conveniente`
-            : 'Sin puertas: la ruta termina en este punto. Usa el modo Puertas.'}
+            ? `${doors} entrada${doors > 1 ? 's' : ''}: la ruta termina en la más conveniente para el usuario.`
+            : 'Aún no tiene entradas. Toca el camino morado que llega al edificio, justo donde cruza la fachada, y elige «Poner entrada aquí».'}
         </Alert>
       )}
-      <Box sx={{ fontSize: '0.7rem', color: '#6B7280', mb: 1, fontFamily: 'monospace' }}>
-        {node.gps.lat.toFixed(6)}, {node.gps.lng.toFixed(6)}
-      </Box>
-      <Button
-        size="small"
-        variant="outlined"
-        color="error"
-        onClick={() => onDelete(node.nodeId)}
-        sx={{ fontSize: '0.65rem', height: 24, px: 1, minWidth: 0 }}
-      >
-        Eliminar
+      {near.length > 0 && (
+        <Box>
+          <SectionLabel>Unido a</SectionLabel>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {near.map(n => (
+              <Chip
+                key={n.nodeId}
+                size="small"
+                label={nodeName(n)}
+                onClick={() => onSelect(n.nodeId)}
+                sx={{ fontSize: '0.7rem', bgcolor: `${NODE_TYPE_META[n.nodeType]?.color ?? '#9CA3AF'}26` }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+      <Button variant="outlined" startIcon={<AltRouteRoundedIcon />} disabled={busy} onClick={() => onDrawFrom(node.nodeId)} sx={pillSx}>
+        Dibujar camino desde aquí
       </Button>
+      <ConfirmDelete key={node.nodeId} label="Eliminar punto" disabled={busy} onConfirm={() => onDelete(node.nodeId)} />
+    </Box>
+  );
+}
+
+function EdgeDetails({
+  edge, nodes, busy, onDoor, onSplit, onDelete, onSelect,
+}: {
+  edge: GraphEdge;
+  nodes: GraphNode[];
+  busy: boolean;
+  onDoor: () => void;
+  onSplit: () => void;
+  onDelete: () => void;
+  onSelect: (nodeId: string) => void;
+}) {
+  const a = nodes.find(n => n.nodeId === edge.nodeA);
+  const b = nodes.find(n => n.nodeId === edge.nodeB);
+  const meters = a?.gps && b?.gps ? haversineDistance(a.gps.lat, a.gps.lng, b.gps.lat, b.gps.lng) : null;
+  const building = [a, b].find(n => n?.nodeType === 'BUILDING');
+  const hasDoor = [a, b].some(n => n?.nodeType === 'DOOR');
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box>
+        <SectionLabel>Camino entre</SectionLabel>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          {[a, b].map((n, i) => n && (
+            <Chip key={n.nodeId} size="small" label={nodeName(n)} onClick={() => onSelect(n.nodeId)}
+              sx={{ fontSize: '0.72rem', bgcolor: `${NODE_TYPE_META[n.nodeType]?.color ?? '#9CA3AF'}26`, order: i * 2 }} />
+          ))}
+          <Typography sx={{ order: 1, color: 'text.secondary' }}>↔</Typography>
+        </Box>
+        {meters !== null && (
+          <Typography variant="caption" color="text.secondary">{Math.round(meters)} m de largo</Typography>
+        )}
+      </Box>
+      {building && !hasDoor && (
+        <>
+          <Alert severity="info" sx={alertSx}>
+            ¿Por aquí se entra a {nodeName(building)}? Toca el camino justo donde cruza la fachada y pon la entrada.
+          </Alert>
+          <Button variant="contained" startIcon={<DoorFrontRoundedIcon />} disabled={busy} onClick={onDoor}
+            sx={{ ...pillSx, bgcolor: '#8B5CF6', '&:hover': { bgcolor: '#7C3AED' } }}>
+            Poner entrada aquí
+          </Button>
+        </>
+      )}
+      <Box>
+        <Button variant="outlined" startIcon={<PlaceRoundedIcon />} disabled={busy} onClick={onSplit} sx={{ ...pillSx, width: '100%' }}>
+          Agregar punto aquí
+        </Button>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          Para que el camino siga una curva: agrega un punto y arrástralo.
+        </Typography>
+      </Box>
+      <ConfirmDelete key={edge.id} label="Eliminar camino" disabled={busy} onConfirm={onDelete} />
     </Box>
   );
 }
 
 // ── Inner component that lives inside MapContainer ──────────────
 function MapInteraction({
-  mode,
   nodes,
   edges,
-  edgeNodeA,
-  chainNodeId,
+  selection,
+  drawing,
   onMapClick,
-  onMarkerClick,
-  onMarkerDragEnd,
+  onNodeClick,
   onEdgeClick,
-  onDeleteNode,
-  onChangeType,
-  onRename,
+  onNodeDragEnd,
 }: {
-  mode: Mode;
   nodes: GraphNode[];
   edges: GraphEdge[];
-  edgeNodeA: string | null;
-  chainNodeId: string | null;
+  selection: Selection;
+  drawing: Drawing;
   onMapClick: (lat: number, lng: number) => void;
-  onMarkerClick: (nodeId: string) => void;
-  onMarkerDragEnd: (nodeId: string, lat: number, lng: number) => void;
+  onNodeClick: (nodeId: string) => void;
   onEdgeClick: (edge: GraphEdge, lat: number, lng: number) => void;
-  onDeleteNode: (nodeId: string) => void;
-  onChangeType: (nodeId: string, type: NodeType) => void;
-  onRename: (nodeId: string, label: string) => void;
+  onNodeDragEnd: (nodeId: string, lat: number, lng: number) => void;
 }) {
   const [cursorPos, setCursorPos] = useState<[number, number] | null>(null);
 
   useMapEvents({
-    click(e) {
-      if (mode === 'add-node') onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-    mousemove(e) {
-      const needsPreview =
-        (mode === 'add-edge' && edgeNodeA) ||
-        (mode === 'add-node' && chainNodeId);
-      if (needsPreview) {
-        setCursorPos([e.latlng.lat, e.latlng.lng]);
-      } else {
-        setCursorPos(null);
-      }
-    },
+    click(e) { onMapClick(e.latlng.lat, e.latlng.lng); },
+    mousemove(e) { setCursorPos(drawing?.from ? [e.latlng.lat, e.latlng.lng] : null); },
   });
 
-  // Anchor point for the live preview line
-  const previewAnchorId = mode === 'add-edge' ? edgeNodeA : chainNodeId;
-  const nodeAPos = previewAnchorId
-    ? nodes.find(n => n.nodeId === previewAnchorId)?.gps
-    : null;
-
-  // Build permanent polylines
-  const polylines = edges
-    .map(edge => {
-      const a = nodes.find(n => n.nodeId === edge.nodeA);
-      const b = nodes.find(n => n.nodeId === edge.nodeB);
-      if (!a?.gps || !b?.gps) return null;
-      return { edge, positions: [[a.gps.lat, a.gps.lng], [b.gps.lat, b.gps.lng]] as [number, number][] };
-    })
-    .filter(Boolean) as { edge: GraphEdge; positions: [number, number][] }[];
+  const fromPos = drawing?.from ? nodes.find(n => n.nodeId === drawing.from)?.gps : null;
+  const selectedNodeId = selection?.kind === 'node' ? selection.id : null;
+  const selectedBuilding = selectedNodeId && nodes.find(n => n.nodeId === selectedNodeId)?.nodeType === 'BUILDING'
+    ? selectedNodeId : null;
 
   return (
     <>
-      {/* Permanent edges */}
-      {polylines.map(({ edge, positions }) => {
-        // En modo Puertas se resaltan los caminos que llegan a un edificio: ahí se marca la puerta
-        const toBuilding = mode === 'door' && [edge.nodeA, edge.nodeB]
-          .some(id => nodes.find(n => n.nodeId === id)?.nodeType === 'BUILDING');
+      {edges.map(edge => {
+        const a = nodes.find(n => n.nodeId === edge.nodeA);
+        const b = nodes.find(n => n.nodeId === edge.nodeB);
+        if (!a?.gps || !b?.gps) return null;
+        const selected = selection?.kind === 'edge' && selection.id === edge.id;
+        // Con un edificio elegido se resaltan sus caminos: ahí se marca la entrada
+        const ofBuilding = !!selectedBuilding && (edge.nodeA === selectedBuilding || edge.nodeB === selectedBuilding);
         return (
           <Polyline
             key={edge.id}
-            positions={positions}
+            positions={[[a.gps.lat, a.gps.lng], [b.gps.lat, b.gps.lng]]}
             pathOptions={{
-              color: toBuilding ? '#8B5CF6' : '#00d084',
-              weight: toBuilding ? 6 : 3,
-              opacity: mode === 'door' && !toBuilding ? 0.35 : 0.85,
+              color: selected ? '#F59E0B' : ofBuilding ? '#8B5CF6' : '#00d084',
+              weight: selected || ofBuilding ? 7 : 5,
+              opacity: 0.9,
+              bubblingMouseEvents: false,
             }}
             eventHandlers={{ click: e => onEdgeClick(edge, e.latlng.lat, e.latlng.lng) }}
           />
         );
       })}
 
-      {/* Live preview line: anchor → cursor (works in add-edge AND add-node modes) */}
-      {nodeAPos && cursorPos && (
-        <Polyline
-          positions={[[nodeAPos.lat, nodeAPos.lng], cursorPos]}
-          pathOptions={{ color: '#F59E0B', weight: 2.5, opacity: 0.9, dashArray: '6 5' }}
+      {/* Dónde quedaría la entrada o el punto nuevo */}
+      {selection?.kind === 'edge' && (
+        <Marker
+          position={[selection.lat, selection.lng]}
+          interactive={false}
+          icon={makeIcon('#F59E0B', '#fff', 12, true)}
         />
       )}
 
-      {/* Nodes */}
+      {fromPos && cursorPos && (
+        <Polyline
+          positions={[[fromPos.lat, fromPos.lng], cursorPos]}
+          pathOptions={{ color: '#F59E0B', weight: 3, opacity: 0.9, dashArray: '6 5', interactive: false }}
+        />
+      )}
+
       {nodes.map(node => {
         if (!node.gps) return null;
-        const isSelected = edgeNodeA === node.nodeId || chainNodeId === node.nodeId;
-        // highlight nodes already connected to selected node
-        const anchorId = edgeNodeA ?? chainNodeId;
-        const isConnected =
-          anchorId != null &&
-          !isSelected &&
-          edges.some(
-            e =>
-              (e.nodeA === anchorId && e.nodeB === node.nodeId) ||
-              (e.nodeB === anchorId && e.nodeA === node.nodeId)
-          );
-
-        const icon = isSelected
-          ? selectedIcon
-          : isConnected
-          ? highlightIcon
-          : icons[node.nodeType] ?? icons.WAYPOINT;
-
+        const highlighted = node.nodeId === selectedNodeId || node.nodeId === drawing?.from;
         return (
           <Marker
             key={node.nodeId}
             position={[node.gps.lat, node.gps.lng]}
-            icon={icon}
-            draggable={mode === 'move'}
+            icon={highlighted ? selectedIcon : icons[node.nodeType] ?? icons.WAYPOINT}
+            draggable={!drawing}
             eventHandlers={{
-              click: () => onMarkerClick(node.nodeId),
+              click: () => onNodeClick(node.nodeId),
               dragend(e) {
                 const { lat, lng } = (e.target as L.Marker).getLatLng();
-                onMarkerDragEnd(node.nodeId, lat, lng);
+                onNodeDragEnd(node.nodeId, lat, lng);
               },
             }}
           >
-            <Popup>
-              <NodePopup
-                node={node}
-                nodes={nodes}
-                edges={edges}
-                onChangeType={onChangeType}
-                onRename={onRename}
-                onDelete={onDeleteNode}
-              />
-            </Popup>
+            <MapTooltip direction="top" offset={[0, -8]}>
+              {nodeName(node)} · {NODE_TYPE_META[node.nodeType]?.label ?? node.nodeType}
+            </MapTooltip>
           </Marker>
         );
       })}
     </>
   );
+}
+
+function FocusOn({ target }: { target: { lat: number; lng: number; n: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 19), { duration: 0.6 });
+  }, [map, target]);
+  return null;
 }
 
 // ── Preview: auto-fit bounds ──────────────────────────────────
@@ -1114,13 +1201,11 @@ export default function MapPage() {
   const tab: MapTab = MAP_TABS.some(t => t.value === params.get('tab')) ? params.get('tab') as MapTab : 'editor';
   const setTab = (v: MapTab) => setParams(v === 'editor' ? {} : { tab: v }, { replace: true });
   const [mapLayer, setMapLayer] = useState<TileLayerType>('street');
-  const [mode, setMode] = useState<Mode>('view');
-  const [edgeNodeA, setEdgeNodeA] = useState<string | null>(null);
-  // Last placed node in add-node mode — used for auto-chaining
-  const [chainNodeId, setChainNodeId] = useState<string | null>(null);
-  const [deleteEdgeConfirm, setDeleteEdgeConfirm] = useState<GraphEdge | null>(null);
-  const [doorNotice, setDoorNotice] = useState<string | null>(null);
-  const [splitting, setSplitting] = useState(false);
+  const [selection, setSelection] = useState<Selection>(null);
+  const [drawing, setDrawing] = useState<Drawing>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [focus, setFocus] = useState<{ lat: number; lng: number; n: number } | null>(null);
   // Local node positions override (for real-time drag feedback before save)
   const localPositions = useRef<Record<string, { lat: number; lng: number }>>({});
   const [, forceRender] = useState(0);
@@ -1143,18 +1228,6 @@ export default function MapPage() {
     return local ? { ...n, gps: local } : n;
   });
 
-  const createNodeMutation = useMutation({
-    mutationFn: (data: Partial<GraphNode>) => graphService.createNode(data),
-    onSuccess: (created) => {
-      qc.invalidateQueries({ queryKey: ['nodes'] });
-      // Auto-chain: connect to previous node
-      if (chainNodeId) {
-        createEdgeMutation.mutate({ nodeA: chainNodeId, nodeB: created.nodeId, active: true });
-      }
-      setChainNodeId(created.nodeId);
-    },
-  });
-
   const updateNodeMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<GraphNode> }) =>
       graphService.updateNode(id, data),
@@ -1162,150 +1235,164 @@ export default function MapPage() {
       delete localPositions.current[vars.id];
       qc.invalidateQueries({ queryKey: ['nodes'] });
     },
+    onError: () => setNotice({ text: 'No se pudo guardar el cambio. Revisa la conexión.', severity: 'warning' }),
   });
 
-  const createEdgeMutation = useMutation({
-    mutationFn: (data: Partial<GraphEdge>) => graphService.createEdge(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['edges'] });
-      setEdgeNodeA(null);
-    },
-    onError: () => {
-      // ignore duplicate edge errors silently
-    },
-  });
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
-  const deleteEdgeMutation = useMutation({
-    mutationFn: (id: string) => graphService.deleteEdge(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['edges'] });
-      setDeleteEdgeConfirm(null);
-    },
-  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setDrawing(null);
+      setSelection(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  const deleteNodeMutation = useMutation({
-    mutationFn: (id: string) => graphService.deleteNode(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['nodes'] }),
-  });
+  const findNode = (id: string) => rawNodes.find(n => n.nodeId === id);
+  const newId = (prefix: string) => `${prefix}${Date.now().toString().slice(-6)}`;
 
-  const handleMapClick = (lat: number, lng: number) => {
-    const nodeId = `W${Date.now().toString().slice(-5)}`;
-    createNodeMutation.mutate({
-      nodeId,
-      gps: { lat, lng },
-      pixel: { x: 0, y: 0 },
-      nodeType: 'WAYPOINT',
-      active: true,
-    });
-  };
-
-  const handleMarkerClick = (nodeId: string) => {
-    if (mode === 'add-node') {
-      // Re-anchor the chain to this existing node
-      setChainNodeId(nodeId);
-      return;
-    }
-    if (mode === 'door') {
-      const node = rawNodes.find(n => n.nodeId === nodeId);
-      if (node?.nodeType === 'WAYPOINT') handleChangeType(nodeId, 'DOOR');
-      else if (node?.nodeType === 'DOOR') handleChangeType(nodeId, 'WAYPOINT');
-      else setDoorNotice('Solo los waypoints se convierten en puerta (y una puerta vuelve a waypoint)');
-      return;
-    }
-    if (mode !== 'add-edge') return;
-    if (!edgeNodeA) {
-      setEdgeNodeA(nodeId);
-    } else if (edgeNodeA !== nodeId) {
-      createEdgeMutation.mutate({ nodeA: edgeNodeA, nodeB: nodeId, active: true });
-    }
-  };
-
-  const handleChangeType = (nodeId: string, nodeType: NodeType) => {
-    const node = rawNodes.find(n => n.nodeId === nodeId);
-    if (!node) return;
-    const building = neighborsOf(nodeId, rawNodes, edges).find(n => n.nodeType === 'BUILDING');
-    // Una puerta sin nombre toma el de su edificio para reconocerla en la lista
-    const label = nodeType === 'DOOR' && !node.label && building ? `Puerta ${building.label ?? building.nodeId}` : node.label;
-    updateNodeMutation.mutate({ id: nodeId, data: { ...node, nodeType, label } });
-  };
-
-  const handleRename = (nodeId: string, label: string) => {
-    const node = rawNodes.find(n => n.nodeId === nodeId);
-    if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, label: label || undefined } });
-  };
-
-  /** Clic sobre el camino que llega a un edificio, donde cruza la fachada: inserta ahí una puerta. */
-  const splitEdgeWithDoor = async (edge: GraphEdge, lat: number, lng: number) => {
-    const a = rawNodes.find(n => n.nodeId === edge.nodeA);
-    const b = rawNodes.find(n => n.nodeId === edge.nodeB);
-    if (!a?.gps || !b?.gps) return;
-    const building = [a, b].find(n => n.nodeType === 'BUILDING');
-    if (!building) {
-      setDoorNotice('Haz clic en un camino que llegue a un edificio (resaltados en morado)');
-      return;
-    }
-    // Proyección del clic sobre la arista (plano local, preciso a escala de campus)
-    const kx = Math.cos((a.gps.lat * Math.PI) / 180);
-    const bx = (b.gps.lng - a.gps.lng) * kx;
-    const by = b.gps.lat - a.gps.lat;
-    const len2 = bx * bx + by * by;
-    const t = len2 > 0 ? Math.max(0.05, Math.min(0.95, (((lng - a.gps.lng) * kx) * bx + (lat - a.gps.lat) * by) / len2)) : 0.5;
-    const lerp = (p: number, q: number) => p + (q - p) * t;
-    const nodeId = `D${Date.now().toString().slice(-5)}`;
-    setSplitting(true);
+  /** Ejecuta varias llamadas seguidas (crear punto + unirlo…) y refresca el mapa al final. */
+  const run = async (task: () => Promise<void>, failText: string) => {
+    if (busy) return;
+    setBusy(true);
     try {
-      await graphService.createNode({
-        nodeId,
-        gps: { lat: lerp(a.gps.lat, b.gps.lat), lng: lerp(a.gps.lng, b.gps.lng) },
-        pixel: { x: Math.round(lerp(a.pixel?.x ?? 0, b.pixel?.x ?? 0)), y: Math.round(lerp(a.pixel?.y ?? 0, b.pixel?.y ?? 0)) },
-        label: `Puerta ${building.label ?? building.nodeId}`,
-        nodeType: 'DOOR',
-        active: true,
-      });
-      await graphService.createEdge({ nodeA: edge.nodeA, nodeB: nodeId, active: true });
-      await graphService.createEdge({ nodeA: nodeId, nodeB: edge.nodeB, active: true });
-      await graphService.deleteEdge(edge.id);
-      setDoorNotice(`Puerta ${nodeId} creada. Arrástrala en modo Mover si no quedó justo en la fachada.`);
+      await task();
     } catch {
-      setDoorNotice('No se pudo crear la puerta. Revisa la conexión e inténtalo de nuevo.');
+      setNotice({ text: failText, severity: 'warning' });
     } finally {
-      setSplitting(false);
+      setBusy(false);
       qc.invalidateQueries({ queryKey: ['nodes'] });
       qc.invalidateQueries({ queryKey: ['edges'] });
     }
   };
 
-  const handleEdgeClick = (edge: GraphEdge, lat: number, lng: number) => {
-    if (mode === 'door') {
-      if (!splitting) void splitEdgeWithDoor(edge, lat, lng);
-      return;
-    }
-    setDeleteEdgeConfirm(edge);
+  const connect = (a: string, b: string) => {
+    const exists = edges.some(e => (e.nodeA === a && e.nodeB === b) || (e.nodeA === b && e.nodeB === a));
+    return exists ? Promise.resolve() : graphService.createEdge({ nodeA: a, nodeB: b, active: true }).then(() => undefined);
   };
 
-  const handleMarkerDragEnd = (nodeId: string, lat: number, lng: number) => {
+  /** Parte un camino en dos con un punto nuevo donde se hizo clic. */
+  const insertOnEdge = async (edge: GraphEdge, lat: number, lng: number, nodeType: NodeType, label?: string) => {
+    const a = findNode(edge.nodeA);
+    const b = findNode(edge.nodeB);
+    if (!a?.gps || !b?.gps) throw new Error('Camino sin extremos');
+    const t = projectOnEdge(a.gps, b.gps, lat, lng);
+    const lerp = (p: number, q: number) => p + (q - p) * t;
+    const nodeId = newId(nodeType === 'DOOR' ? 'D' : 'W');
+    await graphService.createNode({
+      nodeId,
+      gps: { lat: lerp(a.gps.lat, b.gps.lat), lng: lerp(a.gps.lng, b.gps.lng) },
+      pixel: { x: Math.round(lerp(a.pixel?.x ?? 0, b.pixel?.x ?? 0)), y: Math.round(lerp(a.pixel?.y ?? 0, b.pixel?.y ?? 0)) },
+      label,
+      nodeType,
+      active: true,
+    });
+    await graphService.createEdge({ nodeA: edge.nodeA, nodeB: nodeId, active: true });
+    await graphService.createEdge({ nodeA: nodeId, nodeB: edge.nodeB, active: true });
+    await graphService.deleteEdge(edge.id);
+    return nodeId;
+  };
+
+  const startDrawing = (from: string | null) => {
+    setSelection(null);
+    setDrawing({ from });
+  };
+
+  const handleMapClick = (lat: number, lng: number) => {
+    if (!drawing) { setSelection(null); return; }
+    void run(async () => {
+      const nodeId = newId('W');
+      await graphService.createNode({ nodeId, gps: { lat, lng }, pixel: { x: 0, y: 0 }, nodeType: 'WAYPOINT', active: true });
+      if (drawing.from) await connect(drawing.from, nodeId);
+      setDrawing({ from: nodeId });
+    }, 'No se pudo agregar el punto. Revisa la conexión.');
+  };
+
+  const handleNodeClick = (nodeId: string) => {
+    if (!drawing) { setSelection({ kind: 'node', id: nodeId }); return; }
+    if (!drawing.from) { setDrawing({ from: nodeId }); return; }
+    if (drawing.from === nodeId) return;
+    const from = drawing.from;
+    void run(async () => {
+      await connect(from, nodeId);
+      setDrawing(null);
+      setSelection({ kind: 'node', id: nodeId });
+      setNotice({ text: `Camino unido a ${nodeName(findNode(nodeId))}`, severity: 'success' });
+    }, 'No se pudo unir el camino. Revisa la conexión.');
+  };
+
+  const handleEdgeClick = (edge: GraphEdge, lat: number, lng: number) => {
+    if (!drawing) { setSelection({ kind: 'edge', id: edge.id, lat, lng }); return; }
+    const from = drawing.from;
+    void run(async () => {
+      const nodeId = await insertOnEdge(edge, lat, lng, 'WAYPOINT');
+      if (!from) { setDrawing({ from: nodeId }); return; }
+      await connect(from, nodeId);
+      setDrawing(null);
+      setNotice({ text: 'Camino unido al sendero existente', severity: 'success' });
+    }, 'No se pudo unir el camino. Revisa la conexión.');
+  };
+
+  const handleNodeDragEnd = (nodeId: string, lat: number, lng: number) => {
     // Update local state immediately for real-time feedback
     localPositions.current[nodeId] = { lat, lng };
     forceRender(v => v + 1);
-    // Persist to backend
-    const node = rawNodes.find(n => n.nodeId === nodeId);
-    if (node) {
-      updateNodeMutation.mutate({ id: nodeId, data: { ...node, gps: { lat, lng } } });
-    }
+    const node = findNode(nodeId);
+    if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, gps: { lat, lng } } });
   };
 
-  const handleModeChange = (_: unknown, val: Mode | null) => {
-    if (!val) return;
-    setMode(val);
-    setEdgeNodeA(null);
-    setChainNodeId(null);
-    setDoorNotice(null);
+  const handleChangeType = (nodeId: string, nodeType: NodeType) => {
+    const node = findNode(nodeId);
+    if (!node) return;
+    const building = neighborsOf(nodeId, rawNodes, edges).find(n => n.nodeType === 'BUILDING');
+    // Una entrada sin nombre toma el de su edificio para reconocerla en la lista
+    const label = nodeType === 'DOOR' && !node.label && building ? `Entrada ${nodeName(building)}` : node.label;
+    updateNodeMutation.mutate({ id: nodeId, data: { ...node, nodeType, label } });
   };
 
-  const handleBreakChain = () => setChainNodeId(null);
+  const handleRename = (nodeId: string, label: string) => {
+    const node = findNode(nodeId);
+    if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, label: label || undefined } });
+  };
+
+  const handleDeleteNode = (nodeId: string) => void run(async () => {
+    await graphService.deleteNode(nodeId);
+    setSelection(null);
+    setNotice({ text: 'Punto eliminado', severity: 'success' });
+  }, 'No se pudo eliminar el punto.');
+
+  const handleDeleteEdge = (edge: GraphEdge) => void run(async () => {
+    await graphService.deleteEdge(edge.id);
+    setSelection(null);
+    setNotice({ text: 'Camino eliminado', severity: 'success' });
+  }, 'No se pudo eliminar el camino.');
+
+  const handleSplit = (edge: GraphEdge, lat: number, lng: number, nodeType: NodeType) => void run(async () => {
+    const building = [findNode(edge.nodeA), findNode(edge.nodeB)].find(n => n?.nodeType === 'BUILDING');
+    const nodeId = await insertOnEdge(edge, lat, lng, nodeType, nodeType === 'DOOR' ? `Entrada ${nodeName(building)}` : undefined);
+    setSelection({ kind: 'node', id: nodeId });
+    setNotice({
+      text: nodeType === 'DOOR'
+        ? 'Entrada creada. Si no quedó justo en la fachada, arrástrala.'
+        : 'Punto agregado. Arrástralo para que el camino siga la curva.',
+      severity: 'success',
+    });
+  }, 'No se pudo agregar el punto. Revisa la conexión.');
+
+  const selectNode = (nodeId: string, fly = false) => {
+    setSelection({ kind: 'node', id: nodeId });
+    const gps = findNode(nodeId)?.gps;
+    if (fly && gps) setFocus(f => ({ ...gps, n: (f?.n ?? 0) + 1 }));
+  };
 
   const handlePixelUpdate = (nodeId: string, x: number, y: number) => {
-    const node = rawNodes.find(n => n.nodeId === nodeId);
+    const node = findNode(nodeId);
     if (node) {
       updateNodeMutation.mutate({ id: nodeId, data: { ...node, pixel: { x, y } } });
     }
@@ -1319,35 +1406,27 @@ export default function MapPage() {
         ]
       : [6.149703, -75.366407];
 
-  const modeHint: Record<Mode, string> = {
-    view: '',
-    'add-node': chainNodeId
-      ? `Ancla: ${chainNodeId} — click en mapa para crear y conectar, click en nodo existente para cambiar ancla`
-      : 'Haz click en el mapa para el primer nodo, o en un nodo existente para usarlo como ancla',
-    'add-edge': edgeNodeA
-      ? `Nodo origen: ${edgeNodeA} — ahora haz click en el destino`
-      : 'Haz click en el nodo origen de la ruta',
-    door: splitting
-      ? 'Creando la puerta…'
-      : doorNotice ?? 'Clic en un camino morado justo donde cruza la fachada para crear la puerta · clic en un waypoint lo convierte en puerta',
-    move: 'Arrastra cualquier marcador para reposicionarlo',
-  };
+  const banner: Notice | null = busy
+    ? { text: 'Guardando…', severity: 'info' }
+    : drawing
+      ? {
+          text: drawing.from
+            ? 'Toca el mapa para seguir el camino · toca un punto o camino existente para unirlo y terminar'
+            : 'Toca el mapa, un punto o un camino para empezar',
+          severity: 'info',
+        }
+      : notice;
 
-  const modeColor: Record<Mode, 'info' | 'success' | 'warning' | 'error'> = {
-    view: 'info',
-    'add-node': 'info',
-    'add-edge': edgeNodeA ? 'warning' : 'info',
-    door: doorNotice && !doorNotice.startsWith('Puerta ') ? 'warning' : doorNotice ? 'success' : 'info',
-    move: 'success',
-  };
+  const selectedNode = selection?.kind === 'node' ? nodes.find(n => n.nodeId === selection.id) : undefined;
+  const selectedEdge = selection?.kind === 'edge' ? edges.find(e => e.id === selection.id) : undefined;
 
-  // Lo que la app necesita para detectar la entrada con precisión: cada edificio con sus puertas bien conectadas
+  // Lo que la app necesita para detectar la entrada con precisión: cada edificio con sus entradas bien conectadas
   const doorChecklist = nodes
     .filter(n => n.nodeType === 'BUILDING')
     .map(b => {
       const doors = neighborsOf(b.nodeId, nodes, edges).filter(n => n.nodeType === 'DOOR');
       const broken = doors.filter(d => !doorStatus(d, nodes, edges).ok).length;
-      return { id: b.nodeId, label: b.label ?? b.nodeId, doors: doors.length, broken };
+      return { id: b.nodeId, label: nodeName(b), doors: doors.length, broken };
     });
   const orphanDoors = nodes.filter(n => n.nodeType === 'DOOR' && !doorStatus(n, nodes, edges).ok);
 
@@ -1379,102 +1458,25 @@ export default function MapPage() {
           }}
         >
           {/* Toolbar */}
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 12,
-              left: 12,
-              zIndex: 1000,
-              bgcolor: '#fff',
-              borderRadius: '12px',
-              border: '1px solid #F1F1F1',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              p: '6px',
-            }}
-          >
-            <ToggleButtonGroup
-              value={mode}
-              exclusive
-              onChange={handleModeChange}
-              size="small"
-              sx={{
-                gap: '2px',
-                '& .MuiToggleButton-root': {
-                  border: 'none',
-                  borderRadius: '8px !important',
-                  px: 1.5,
-                  py: 0.75,
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  color: 'text.secondary',
-                  '&.Mui-selected': {
-                    bgcolor: '#00d084',
-                    color: '#fff',
-                    '&:hover': { bgcolor: '#00b874' },
-                  },
-                },
-              }}
-            >
-              <ToggleButton value="view">
-                <VisibilityRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                Ver
-              </ToggleButton>
-              <ToggleButton value="add-node">
-                <PlaceRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                Nodo
-              </ToggleButton>
-              <ToggleButton value="add-edge">
-                <AltRouteRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                Ruta
-              </ToggleButton>
-              <ToggleButton value="door">
-                <DoorFrontRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                Puertas
-              </ToggleButton>
-              <ToggleButton value="move">
-                <OpenWithRoundedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                Mover
-              </ToggleButton>
-            </ToggleButtonGroup>
+          <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 1000 }}>
+            {drawing ? (
+              <Button variant="contained" startIcon={<CheckRoundedIcon />} onClick={() => setDrawing(null)}
+                sx={{ ...pillSx, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                Terminar camino
+              </Button>
+            ) : (
+              <Button variant="contained" startIcon={<AltRouteRoundedIcon />} onClick={() => startDrawing(null)}
+                sx={{ ...pillSx, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                Dibujar camino
+              </Button>
+            )}
           </Box>
 
-          {/* Hint banner */}
-          {mode !== 'view' && (
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 12,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 1000,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-              }}
-            >
-              <Alert
-                severity={modeColor[mode]}
-                sx={{ borderRadius: '12px', fontSize: '0.75rem', py: 0.5, whiteSpace: 'nowrap' }}
-              >
-                {modeHint[mode]}
+          {banner && (
+            <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, maxWidth: '60%' }}>
+              <Alert severity={banner.severity} sx={{ borderRadius: '12px', fontSize: '0.78rem', py: 0.25, boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }}>
+                {banner.text}
               </Alert>
-              {mode === 'add-node' && chainNodeId && (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={handleBreakChain}
-                  sx={{
-                    borderRadius: '12px',
-                    height: 34,
-                    fontSize: '0.75rem',
-                    bgcolor: '#fff',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  Romper cadena
-                </Button>
-              )}
             </Box>
           )}
 
@@ -1509,27 +1511,24 @@ export default function MapPage() {
               maxNativeZoom={TILE_LAYERS[mapLayer].maxNativeZoom}
               maxZoom={22}
             />
+            <FocusOn target={focus} />
             <MapInteraction
-              mode={mode}
               nodes={nodes}
               edges={edges}
-              edgeNodeA={edgeNodeA}
-              chainNodeId={chainNodeId}
+              selection={selection}
+              drawing={drawing}
               onMapClick={handleMapClick}
-              onMarkerClick={handleMarkerClick}
-              onMarkerDragEnd={handleMarkerDragEnd}
+              onNodeClick={handleNodeClick}
               onEdgeClick={handleEdgeClick}
-              onDeleteNode={id => deleteNodeMutation.mutate(id)}
-              onChangeType={handleChangeType}
-              onRename={handleRename}
+              onNodeDragEnd={handleNodeDragEnd}
             />
           </MapContainer>
         </Box>
 
-        {/* ── Right panel ──────────────────────────────────────── */}
+        {/* ── Right panel: opciones de lo que se tocó en el mapa ── */}
         <Paper
           sx={{
-            width: 280,
+            width: 300,
             borderRadius: '18px',
             border: '1px solid #F1F1F1',
             boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
@@ -1538,179 +1537,102 @@ export default function MapPage() {
             overflow: 'hidden',
           }}
         >
-          {/* Stats */}
-          <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1' }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', mb: 1.5 }}>
-              Resumen del grafo
+          <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1', display: 'flex', alignItems: 'center', gap: 1 }}>
+            {selectedNode && (
+              <Box sx={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0, bgcolor: NODE_TYPE_META[selectedNode.nodeType]?.color, border: `2px solid ${NODE_TYPE_META[selectedNode.nodeType]?.border}` }} />
+            )}
+            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', flex: 1, minWidth: 0 }} noWrap>
+              {selectedNode ? nodeName(selectedNode) : selectedEdge ? 'Camino' : 'Editar caminos'}
             </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Box sx={{ flex: 1, bgcolor: '#F8F9FB', borderRadius: '10px', p: 1.5, textAlign: 'center' }}>
-                <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#00d084', lineHeight: 1 }}>
-                  {nodes.length}
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Nodos
-                </Typography>
-              </Box>
-              <Box sx={{ flex: 1, bgcolor: '#F8F9FB', borderRadius: '10px', p: 1.5, textAlign: 'center' }}>
-                <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#6366F1', lineHeight: 1 }}>
-                  {edges.length}
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Rutas
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
-
-          {/* Legend */}
-          <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1' }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.8rem', mb: 1, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Leyenda
-            </Typography>
-            {[
-              ...NODE_TYPES.map(t => ({ color: NODE_TYPE_META[t].color, border: NODE_TYPE_META[t].border, label: NODE_TYPE_META[t].label })),
-              { color: '#F59E0B', border: '#D97706', label: 'Seleccionado' },
-              { color: '#EC4899', border: '#BE185D', label: 'Ya conectado' },
-            ].map(item => (
-              <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.75 }}>
-                <Box
-                  sx={{
-                    width: 12, height: 12, borderRadius: '50%',
-                    bgcolor: item.color, border: `2px solid ${item.border}`,
-                    flexShrink: 0,
-                  }}
-                />
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  {item.label}
-                </Typography>
-              </Box>
-            ))}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
-              <Box sx={{ width: 24, height: 2, bgcolor: '#00d084', flexShrink: 0, borderRadius: 1 }} />
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>Ruta activa</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
-              <Box sx={{ width: 24, height: 2, borderTop: '2px dashed #F59E0B', flexShrink: 0 }} />
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>Vista previa</Typography>
-            </Box>
-          </Box>
-
-          {/* Door checklist */}
-          <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1', maxHeight: 220, overflowY: 'auto' }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.8rem', mb: 0.5, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Puertas por edificio
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-              La app detecta la entrada y termina la ruta en estas puertas
-            </Typography>
-            {doorChecklist.map(b => (
-              <Box key={b.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="body2" sx={{ fontSize: '0.78rem' }}>{b.label}</Typography>
-                <Chip
-                  size="small"
-                  label={b.doors === 0 ? 'Sin puertas' : b.broken > 0 ? `${b.broken} sin conectar` : `${b.doors} puerta${b.doors > 1 ? 's' : ''}`}
-                  sx={{
-                    fontSize: '0.65rem', height: 20,
-                    bgcolor: b.doors === 0 || b.broken > 0 ? '#FEF3C7' : '#EDE9FE',
-                    color: b.doors === 0 || b.broken > 0 ? '#92400E' : '#5B21B6',
-                  }}
-                />
-              </Box>
-            ))}
-            {orphanDoors.length > 0 && (
-              <Alert severity="warning" sx={{ mt: 1, py: 0, fontSize: '0.7rem' }}>
-                Puertas sin edificio o sin camino: {orphanDoors.map(d => d.nodeId).join(', ')}
-              </Alert>
+            {(selectedNode || selectedEdge) && (
+              <Tooltip title="Cerrar (Esc)">
+                <IconButton size="small" onClick={() => setSelection(null)}><CloseRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
+              </Tooltip>
             )}
           </Box>
 
-          {/* Edge list */}
-          <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ p: 2, pb: 1 }}>
-              <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                Rutas activas
-              </Typography>
-            </Box>
-            <List dense sx={{ flex: 1, overflow: 'auto', px: 1 }}>
-              {edges.slice(0, 50).map(edge => (
-                <ListItem
-                  key={edge.id}
-                  sx={{ borderRadius: '8px', '&:hover': { bgcolor: '#F9FAFB' } }}
-                  secondaryAction={
-                    <Tooltip title="Eliminar">
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteEdgeConfirm(edge)}
-                        sx={{ color: '#EF4444' }}
+          <Box sx={{ p: 2, overflowY: 'auto', flex: 1 }}>
+            {selectedNode ? (
+              <NodeDetails
+                key={selectedNode.nodeId}
+                node={selectedNode}
+                nodes={nodes}
+                edges={edges}
+                busy={busy}
+                onRename={handleRename}
+                onChangeType={handleChangeType}
+                onDrawFrom={id => startDrawing(id)}
+                onDelete={handleDeleteNode}
+                onSelect={id => selectNode(id, true)}
+              />
+            ) : selectedEdge && selection?.kind === 'edge' ? (
+              <EdgeDetails
+                key={selectedEdge.id}
+                edge={selectedEdge}
+                nodes={nodes}
+                busy={busy}
+                onDoor={() => handleSplit(selectedEdge, selection.lat, selection.lng, 'DOOR')}
+                onSplit={() => handleSplit(selectedEdge, selection.lat, selection.lng, 'WAYPOINT')}
+                onDelete={() => handleDeleteEdge(selectedEdge)}
+                onSelect={id => selectNode(id, true)}
+              />
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                <Box component="ol" sx={{ m: 0, pl: 2.25, display: 'grid', gap: 0.75, fontSize: '0.82rem', color: 'text.secondary' }}>
+                  <li><b>Toca un punto o un camino</b> para ver sus opciones.</li>
+                  <li><b>Arrastra un punto</b> para moverlo.</li>
+                  <li><b>Dibujar camino</b> para agregar senderos nuevos.</li>
+                </Box>
+
+                <Box>
+                  <SectionLabel>Entradas por edificio</SectionLabel>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                    La app detecta la llegada y termina la ruta en las entradas. Toca un edificio para ir a él.
+                  </Typography>
+                  {doorChecklist.map(b => {
+                    const pending = b.doors === 0 || b.broken > 0;
+                    return (
+                      <Box
+                        key={b.id}
+                        onClick={() => selectNode(b.id, true)}
+                        sx={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
+                          px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', '&:hover': { bgcolor: '#F8F9FB' },
+                        }}
                       >
-                        <DeleteRoundedIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    </Tooltip>
-                  }
-                >
-                  <ListItemText
-                    primary={
-                      <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {edge.nodeA} ↔ {edge.nodeB}
-                      </Typography>
-                    }
-                  />
-                </ListItem>
-              ))}
-              {edges.length === 0 && (
-                <Box sx={{ py: 3, textAlign: 'center' }}>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }} noWrap>{b.label}</Typography>
+                        <Chip
+                          size="small"
+                          label={b.doors === 0 ? 'Sin entradas' : b.broken > 0 ? `${b.broken} sin unir` : `${b.doors} entrada${b.doors > 1 ? 's' : ''}`}
+                          sx={{ fontSize: '0.65rem', height: 20, bgcolor: pending ? '#FEF3C7' : '#EDE9FE', color: pending ? '#92400E' : '#5B21B6' }}
+                        />
+                      </Box>
+                    );
+                  })}
+                  {orphanDoors.length > 0 && (
+                    <Alert severity="warning" sx={{ ...alertSx, mt: 1 }}>
+                      Entradas sueltas: {orphanDoors.map(d => nodeName(d)).join(', ')}
+                    </Alert>
+                  )}
+                </Box>
+
+                <Box>
+                  <SectionLabel>Colores</SectionLabel>
+                  {NODE_TYPES.map(t => (
+                    <Box key={t} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 0.75 }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: NODE_TYPE_META[t].color, border: `2px solid ${NODE_TYPE_META[t].border}`, flexShrink: 0 }} />
+                      <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{NODE_TYPE_META[t].label}</Typography>
+                    </Box>
+                  ))}
                   <Typography variant="caption" color="text.secondary">
-                    Sin rutas. Usa el modo "Ruta" para agregar.
+                    {nodes.length} puntos · {edges.length} caminos
                   </Typography>
                 </Box>
-              )}
-            </List>
+              </Box>
+            )}
           </Box>
         </Paper>
       </Box>
-
-      {/* Delete edge confirm */}
-      {deleteEdgeConfirm && (
-        <Box
-          sx={{
-            position: 'fixed',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            bgcolor: '#fff',
-            border: '1px solid #F1F1F1',
-            borderRadius: '14px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            p: '12px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            zIndex: 2000,
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-            ¿Eliminar ruta{' '}
-            <strong>
-              {deleteEdgeConfirm.nodeA} ↔ {deleteEdgeConfirm.nodeB}
-            </strong>
-            ?
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button variant="outlined" size="small" onClick={() => setDeleteEdgeConfirm(null)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() => deleteEdgeMutation.mutate(deleteEdgeConfirm.id)}
-              sx={{ background: '#EF4444', '&:hover': { background: '#DC2626' } }}
-            >
-              Eliminar
-            </Button>
-          </Box>
-        </Box>
-      )}
       </> /* closes editor fragment */
       )}
     </Box>
