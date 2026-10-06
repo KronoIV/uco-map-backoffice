@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
-import type { GeoJSONSource, LayerSpecification, Map as MlMap, StyleSpecification } from 'maplibre-gl';
+import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, StyleSpecification } from 'maplibre-gl';
 import type { Feature, FeatureCollection } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GraphEdge, GraphNode } from '../../types';
+import { FOOT_WAYS, type CampusOsm } from '../../utils/campus-osm';
 
 // Misma vista que el mapa exterior de la app (uco-map-app/src/navigation/outdoor-map.ts)
 const STREET_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -19,7 +20,6 @@ const SATELLITE_STYLE: StyleSpecification = {
       maxzoom: 19,
       attribution: '&copy; Esri, Maxar, Earthstar Geographics',
     },
-    // Solo para levantar los edificios en 3D sobre la imagen
     openmaptiles: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
   },
   layers: [{ id: 'satellite', type: 'raster', source: 'satellite' }],
@@ -34,6 +34,8 @@ interface Props {
   nodes: GraphNode[];
   edges: GraphEdge[];
   satellite: boolean;
+  /** Edificios y senderos de OSM en vivo (los mismos de la app); sin ellos quedan los de los tiles. */
+  osm?: CampusOsm | null;
   nodeLook: (n: GraphNode) => NodeLook;
   nodeTitle?: (n: GraphNode) => string;
   edgeLook: (e: GraphEdge) => EdgeLook;
@@ -118,6 +120,72 @@ function addOverlays(map: MlMap) {
   });
 }
 
+const OSM_BUILDINGS = 'ucm-osm-buildings';
+
+/** Senderos y edificios de OSM en vivo, igual que en la app; los edificios de los tiles se ocultan. */
+function addLiveOsm(map: MlMap, osm: CampusOsm | null | undefined, satellite: boolean, edgesOnTop: boolean) {
+  if (!osm) return;
+  const paths = map.getSource('ucm-osm-paths') as GeoJSONSource | undefined;
+  if (paths) {
+    paths.setData(osm.paths);
+    (map.getSource(OSM_BUILDINGS) as GeoJSONSource).setData(osm.buildings);
+  } else {
+    map.addSource('ucm-osm-paths', { type: 'geojson', data: osm.paths });
+    map.addSource(OSM_BUILDINGS, { type: 'geojson', data: osm.buildings });
+    // Sobre el satélite los senderos ya se ven en la foto
+    if (!satellite) {
+      const foot: ExpressionSpecification = ['match', ['get', 'highway'], FOOT_WAYS, true, false];
+      const round = { 'line-cap': 'round', 'line-join': 'round' } as const;
+      map.addLayer({
+        id: 'ucm-osm-paths-casing', type: 'line', source: 'ucm-osm-paths', minzoom: 14, layout: round,
+        paint: {
+          'line-color': '#cfc6b8',
+          'line-width': ['interpolate', ['exponential', 1.5], ['zoom'],
+            15, ['case', foot, 2.5, 5], 18, ['case', foot, 7, 14], 21, ['case', foot, 14, 28]],
+        },
+      });
+      map.addLayer({
+        id: 'ucm-osm-paths', type: 'line', source: 'ucm-osm-paths', minzoom: 14, layout: round,
+        paint: {
+          'line-color': ['case', foot, '#fbf8f3', '#ffffff'],
+          'line-width': ['interpolate', ['exponential', 1.5], ['zoom'],
+            15, ['case', foot, 1.5, 3.5], 18, ['case', foot, 5, 11], 21, ['case', foot, 11, 24]],
+        },
+      });
+    }
+    map.addLayer({
+      id: OSM_BUILDINGS, type: 'fill-extrusion', source: OSM_BUILDINGS, minzoom: 14,
+      paint: {
+        'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height'], 0, '#D0DCE8', 15, '#B8C8DA', 40, '#9FB2C4'],
+        'fill-extrusion-height': ['get', 'height'],
+        'fill-extrusion-base': ['get', 'base'],
+        'fill-extrusion-opacity': satellite ? 0.55 : 0.82,
+      },
+    });
+  }
+  if (osm.buildings.features.length > 0) {
+    for (const layer of map.getStyle().layers ?? []) {
+      if (layer.type === 'fill-extrusion' && layer.id !== OSM_BUILDINGS) map.setLayoutProperty(layer.id, 'visibility', 'none');
+    }
+  }
+  stackLayers(map, edgesOnTop);
+}
+
+/**
+ * Suelo → (caminos del grafo) → ruta → edificios 3D → etiquetas → (caminos del grafo al editar) → línea de dibujo.
+ * Los edificios tapan la ruta donde queda detrás o dentro de ellos, como en la app.
+ */
+function stackLayers(map: MlMap, edgesOnTop: boolean) {
+  const layers = map.getStyle().layers ?? [];
+  const labels = layers.find(l => l.type === 'symbol')?.id;
+  const edges = ['ucm-edges-line', 'ucm-edges-hit'];
+  const under = ['ucm-osm-paths-casing', 'ucm-osm-paths', ...(edgesOnTop ? [] : edges), 'ucm-route-shadow', 'ucm-route-casing', 'ucm-route-line'];
+  const over = [...(edgesOnTop ? edges : []), 'ucm-rubber-line'];
+  for (const id of under) if (map.getLayer(id)) map.moveLayer(id, labels);
+  for (const l of layers) if (l.type === 'fill-extrusion') map.moveLayer(l.id, labels);
+  for (const id of over) if (map.getLayer(id)) map.moveLayer(id);
+}
+
 function dotElement(look: NodeLook, title: string): HTMLDivElement {
   // MapLibre posiciona el elemento del marcador con transform: el estilo va en un hijo
   const el = document.createElement('div');
@@ -147,7 +215,7 @@ export default function CampusMap3D(props: Props) {
   const propsRef = useRef(props);
   useLayoutEffect(() => { propsRef.current = props; });
 
-  const { nodes, edges, satellite, route, routeColor, userPos, pin, rubberFrom, draggable, focus } = props;
+  const { nodes, edges, satellite, osm, route, routeColor, userPos, pin, rubberFrom, draggable, focus } = props;
 
   const drawEdges = () => {
     const map = mapRef.current;
@@ -210,6 +278,9 @@ export default function CampusMap3D(props: Props) {
     map.on('style.load', () => {
       addBuildings(map, propsRef.current.satellite);
       addOverlays(map);
+      const { osm: data, satellite: sat, onEdgeClick } = propsRef.current;
+      stackLayers(map, !!onEdgeClick);
+      addLiveOsm(map, data, sat, !!onEdgeClick);
       readyRef.current = true;
       drawEdges();
       drawRoute();
@@ -255,6 +326,10 @@ export default function CampusMap3D(props: Props) {
   }, [satellite]);
 
   useEffect(drawEdges, [nodes, edges, props.edgeLook]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && readyRef.current) addLiveOsm(map, osm, propsRef.current.satellite, !!propsRef.current.onEdgeClick);
+  }, [osm]);
   useEffect(drawRoute, [route, routeColor]);
   useEffect(() => {
     if (!rubberFrom) cursorRef.current = null;

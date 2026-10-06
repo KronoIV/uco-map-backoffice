@@ -33,6 +33,8 @@ import CampusMap3D, { type EdgeLook, type NodeLook } from '../components/map3d/C
 import {
   buildRoutingGraph, routeToBuilding, routeToNode, routeLabel, nodeTypeOf, haversineDistance, formatDistance, walkingMinutes,
 } from '../utils/campus-routing';
+import { buildingsCrossed, footprintAt, type Footprint } from '../utils/campus-osm';
+import { useCampusOsm } from '../hooks/useCampusOsm';
 import campusRender from '../assets/campus-render.webp';
 
 // Fix default leaflet icons
@@ -358,10 +360,42 @@ function selectedBuildingOf(selection: Selection, nodes: GraphNode[]): string | 
   return id && nodes.find(n => n.nodeId === id)?.nodeType === 'BUILDING' ? id : null;
 }
 
-function editorEdgeLook(edge: GraphEdge, selection: Selection, selectedBuilding: string | null): EdgeLook {
+function editorEdgeLook(edge: GraphEdge, selection: Selection, selectedBuilding: string | null, crossing = false): EdgeLook {
   const selected = selection?.kind === 'edge' && selection.id === edge.id;
   const ofBuilding = !!selectedBuilding && (edge.nodeA === selectedBuilding || edge.nodeB === selectedBuilding);
-  return { color: selected ? '#F59E0B' : ofBuilding ? '#8B5CF6' : '#00d084', width: selected || ofBuilding ? 7 : 5, opacity: 0.9 };
+  const color = selected ? '#F59E0B' : crossing ? '#EF4444' : ofBuilding ? '#8B5CF6' : '#00d084';
+  return { color, width: selected || ofBuilding || crossing ? 7 : 5, opacity: 0.9 };
+}
+
+// Márgenes por el error de las plantas de OSM y de la ubicación de los puntos
+const CROSSING_MIN_M = 2;
+const DOOR_MAX_DEPTH_M = 3;
+
+/**
+ * Lo que haría ver la ruta atravesando un edificio: caminos que cruzan su planta en OSM y entradas metidas
+ * dentro. El tramo de una entrada (o un punto) al centro de su propio edificio es interno y no cuenta.
+ */
+function buildingIssues(nodes: GraphNode[], edges: GraphEdge[], footprints: Footprint[]) {
+  const byId = new Map(nodes.map(n => [n.nodeId, n]));
+  const crossings: { edge: GraphEdge; building: string; meters: number; at: { lat: number; lng: number } }[] = [];
+  for (const edge of edges) {
+    const a = byId.get(edge.nodeA);
+    const b = byId.get(edge.nodeB);
+    if (!a?.gps || !b?.gps) continue;
+    const own = [a, b].filter(n => n.nodeType === 'BUILDING').map(n => footprintAt(n.gps, footprints)?.footprint.id);
+    for (const c of buildingsCrossed(a.gps, b.gps, footprints, CROSSING_MIN_M)) {
+      if (own.includes(c.footprint.id)) continue;
+      const at = { lat: (a.gps.lat + b.gps.lat) / 2, lng: (a.gps.lng + b.gps.lng) / 2 };
+      crossings.push({ edge, building: c.footprint.name || 'un edificio', meters: c.meters, at });
+    }
+  }
+  const deepDoors = nodes.flatMap(n => {
+    const inside = n.nodeType === 'DOOR' && n.gps ? footprintAt(n.gps, footprints) : null;
+    return inside && inside.depth > DOOR_MAX_DEPTH_M
+      ? [{ node: n, building: inside.footprint.name || 'el edificio', depth: inside.depth }]
+      : [];
+  });
+  return { crossings, deepDoors, crossingIds: new Set(crossings.map(c => c.edge.id)) };
 }
 
 function MapInteraction({
@@ -369,6 +403,7 @@ function MapInteraction({
   edges,
   selection,
   drawing,
+  crossingIds,
   onMapClick,
   onNodeClick,
   onEdgeClick,
@@ -378,6 +413,7 @@ function MapInteraction({
   edges: GraphEdge[];
   selection: Selection;
   drawing: Drawing;
+  crossingIds: Set<string>;
   onMapClick: (lat: number, lng: number) => void;
   onNodeClick: (nodeId: string) => void;
   onEdgeClick: (edge: GraphEdge, lat: number, lng: number) => void;
@@ -400,7 +436,7 @@ function MapInteraction({
         const a = nodes.find(n => n.nodeId === edge.nodeA);
         const b = nodes.find(n => n.nodeId === edge.nodeB);
         if (!a?.gps || !b?.gps) return null;
-        const look = editorEdgeLook(edge, selection, selectedBuilding);
+        const look = editorEdgeLook(edge, selection, selectedBuilding, crossingIds.has(edge.id));
         return (
           <Polyline
             key={edge.id}
@@ -519,6 +555,7 @@ function UserNavPreview({
   const [simPos, setSimPos] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [mapLayer, setMapLayer] = useState<TileLayerType>('street');
+  const osm = useCampusOsm(nodes);
 
   // Mismo grafo que carga la app (solo activos con GPS) y mismo algoritmo (utils/campus-routing.ts)
   const graph = useMemo(() => buildRoutingGraph(
@@ -608,6 +645,7 @@ function UserNavPreview({
             nodes={nodes}
             edges={edges}
             satellite={mapLayer === 'satellite'}
+            osm={osm}
             nodeLook={previewNodeLook}
             nodeTitle={n => `${nodeName(n)} · ${NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType}`}
             edgeLook={() => ({ color: '#64748B', width: 4, opacity: 0.6 })}
@@ -1301,6 +1339,7 @@ export default function MapPage() {
     const local = localPositions.current[n.nodeId];
     return local ? { ...n, gps: local } : n;
   });
+  const osm = useCampusOsm(rawNodes);
 
   const updateNodeMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<GraphNode> }) =>
@@ -1503,6 +1542,8 @@ export default function MapPage() {
       return { id: b.nodeId, label: nodeName(b), doors: doors.length, broken };
     });
   const orphanDoors = nodes.filter(n => n.nodeType === 'DOOR' && !doorStatus(n, nodes, edges).ok);
+  const issues = osm ? buildingIssues(nodes, edges, osm.footprints) : null;
+  const crossingIds = issues?.crossingIds ?? new Set<string>();
 
   return (
     <Box sx={{ height: 'calc(100vh - 64px - 48px)', display: 'flex', flexDirection: 'column' }}>
@@ -1566,9 +1607,10 @@ export default function MapPage() {
               nodes={nodes}
               edges={edges}
               satellite={mapLayer === 'satellite'}
+              osm={osm}
               nodeLook={n => (n.nodeId === selectedNode?.nodeId || n.nodeId === drawing?.from ? SELECTED_LOOK : typeLook(n.nodeType))}
               nodeTitle={n => `${nodeName(n)} · ${NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType}`}
-              edgeLook={e => editorEdgeLook(e, selection, selectedBuildingOf(selection, nodes))}
+              edgeLook={e => editorEdgeLook(e, selection, selectedBuildingOf(selection, nodes), crossingIds.has(e.id))}
               pin={selection?.kind === 'edge' ? { lat: selection.lat, lng: selection.lng } : null}
               rubberFrom={drawing?.from ? findNode(drawing.from)?.gps ?? null : null}
               draggable={!drawing}
@@ -1599,6 +1641,7 @@ export default function MapPage() {
               edges={edges}
               selection={selection}
               drawing={drawing}
+              crossingIds={crossingIds}
               onMapClick={handleMapClick}
               onNodeClick={handleNodeClick}
               onEdgeClick={handleEdgeClick}
@@ -1696,6 +1739,45 @@ export default function MapPage() {
                     <Alert severity="warning" sx={{ ...alertSx, mt: 1 }}>
                       Entradas sueltas: {orphanDoors.map(d => nodeName(d)).join(', ')}
                     </Alert>
+                  )}
+                </Box>
+
+                <Box>
+                  <SectionLabel>Caminos y edificios</SectionLabel>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                    Comparado con las plantas de OpenStreetMap que dibujan los dos mapas: si un camino las cruza, la ruta se ve pasando por dentro.
+                  </Typography>
+                  {!issues ? (
+                    <Typography variant="caption" color="text.secondary">Cargando edificios de OpenStreetMap…</Typography>
+                  ) : issues.crossings.length === 0 && issues.deepDoors.length === 0 ? (
+                    <Alert severity="success" sx={alertSx}>Ningún camino atraviesa un edificio.</Alert>
+                  ) : (
+                    <>
+                      {issues.crossings.map(c => (
+                        <Box
+                          key={`${c.edge.id}-${c.building}`}
+                          onClick={() => {
+                            setSelection({ kind: 'edge', id: c.edge.id, ...c.at });
+                            setFocus(f => ({ ...c.at, n: (f?.n ?? 0) + 1 }));
+                          }}
+                          sx={{ px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', '&:hover': { bgcolor: '#FEF2F2' } }}
+                        >
+                          <b>{nodeName(findNode(c.edge.nodeA))} – {nodeName(findNode(c.edge.nodeB))}</b> cruza {c.building} ({Math.round(c.meters)} m)
+                        </Box>
+                      ))}
+                      {issues.deepDoors.map(d => (
+                        <Box
+                          key={d.node.nodeId}
+                          onClick={() => selectNode(d.node.nodeId, true)}
+                          sx={{ px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', '&:hover': { bgcolor: '#FEF2F2' } }}
+                        >
+                          <b>{nodeName(d.node)}</b> queda {Math.round(d.depth)} m dentro de {d.building}: arrástrala a la fachada
+                        </Box>
+                      ))}
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        En rojo en el mapa. Agrega puntos para rodear el edificio o mueve los que quedaron dentro.
+                      </Typography>
+                    </>
                   )}
                 </Box>
 
