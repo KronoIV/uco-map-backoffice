@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, Popup, useMap, Tooltip as MapTooltip } from 'react-leaflet';
 import L from 'leaflet';
 import {
   Box, Paper, Typography, Button, Chip,
   List, ListItem, ListItemText, Tooltip, IconButton, Alert,
-  TextField, MenuItem, Divider,
+  TextField, MenuItem, Divider, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import AltRouteRoundedIcon from '@mui/icons-material/AltRouteRounded';
@@ -29,7 +29,10 @@ import type { GraphNode, GraphEdge, NodeType } from '../types';
 import PageHeader from '../components/PageHeader';
 import SectionTabs, { type SectionTab } from '../components/SectionTabs';
 import PoiEditorPage from './PoiEditorPage';
-import { dijkstra, findStartNode, haversineDistance, formatDistance, formatETA } from '../utils/dijkstra';
+import CampusMap3D, { type EdgeLook, type NodeLook } from '../components/map3d/CampusMap3D';
+import {
+  buildRoutingGraph, routeToBuilding, routeToNode, routeLabel, nodeTypeOf, haversineDistance, formatDistance, walkingMinutes,
+} from '../utils/campus-routing';
 import campusRender from '../assets/campus-render.webp';
 
 // Fix default leaflet icons
@@ -66,6 +69,60 @@ const icons = Object.fromEntries(
 ) as Record<NodeType, L.DivIcon>;
 
 const selectedIcon = makeIcon('#F59E0B', '#D97706', 18, true);
+
+// Mismos colores en el mapa 3D que en el 2D
+const typeLook = (t: NodeType): NodeLook => {
+  const m = NODE_TYPE_META[t] ?? NODE_TYPE_META.WAYPOINT;
+  return { color: m.color, border: m.border, size: m.size };
+};
+const SELECTED_LOOK: NodeLook = { color: '#F59E0B', border: '#D97706', size: 18, ring: true };
+
+/** Igual que la app: «N min» a 1.2 m/s. */
+const formatEta = (meters: number) => {
+  const min = walkingMinutes(meters);
+  return min <= 1 ? '1 min' : `${min} min`;
+};
+
+const VIEW_3D_KEY = 'ucomap.admin.map3d';
+
+/** 2D (Leaflet, para editar con precisión) o 3D (como lo ve el estudiante en la app). */
+function useView3d() {
+  const [view3d, setView3d] = useState(() => {
+    try { return localStorage.getItem(VIEW_3D_KEY) === '1'; } catch { return false; }
+  });
+  const change = (v: boolean) => {
+    setView3d(v);
+    try { localStorage.setItem(VIEW_3D_KEY, v ? '1' : '0'); } catch { /* modo privado */ }
+  };
+  return [view3d, change] as const;
+}
+
+function MapViewControls({
+  view3d, onView3d, layer, onLayer,
+}: { view3d: boolean; onView3d: (v: boolean) => void; layer: TileLayerType; onLayer: () => void }) {
+  return (
+    <Box sx={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1000, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={view3d ? '3d' : '2d'}
+        onChange={(_, v) => v && onView3d(v === '3d')}
+        sx={{ bgcolor: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', borderRadius: '10px', '& .MuiToggleButton-root': { px: 1.5, fontWeight: 700, textTransform: 'none' } }}
+      >
+        <ToggleButton value="2d">2D</ToggleButton>
+        <ToggleButton value="3d">3D</ToggleButton>
+      </ToggleButtonGroup>
+      <Tooltip title={layer === 'street' ? 'Vista satelital (ESRI)' : 'Vista mapa'} placement="left">
+        <IconButton
+          onClick={onLayer}
+          sx={{ bgcolor: '#fff', border: '1px solid #E5E7EB', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', '&:hover': { bgcolor: '#F8F9FB' } }}
+        >
+          {layer === 'street' ? <SatelliteAltRoundedIcon sx={{ fontSize: 20 }} /> : <MapRoundedIcon sx={{ fontSize: 20 }} />}
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+}
 
 type Selection =
   | { kind: 'node'; id: string }
@@ -295,6 +352,18 @@ function EdgeDetails({
 }
 
 // ── Inner component that lives inside MapContainer ──────────────
+/** Edificio elegido: sus caminos se resaltan porque ahí se marca la entrada. */
+function selectedBuildingOf(selection: Selection, nodes: GraphNode[]): string | null {
+  const id = selection?.kind === 'node' ? selection.id : null;
+  return id && nodes.find(n => n.nodeId === id)?.nodeType === 'BUILDING' ? id : null;
+}
+
+function editorEdgeLook(edge: GraphEdge, selection: Selection, selectedBuilding: string | null): EdgeLook {
+  const selected = selection?.kind === 'edge' && selection.id === edge.id;
+  const ofBuilding = !!selectedBuilding && (edge.nodeA === selectedBuilding || edge.nodeB === selectedBuilding);
+  return { color: selected ? '#F59E0B' : ofBuilding ? '#8B5CF6' : '#00d084', width: selected || ofBuilding ? 7 : 5, opacity: 0.9 };
+}
+
 function MapInteraction({
   nodes,
   edges,
@@ -323,8 +392,7 @@ function MapInteraction({
 
   const fromPos = drawing?.from ? nodes.find(n => n.nodeId === drawing.from)?.gps : null;
   const selectedNodeId = selection?.kind === 'node' ? selection.id : null;
-  const selectedBuilding = selectedNodeId && nodes.find(n => n.nodeId === selectedNodeId)?.nodeType === 'BUILDING'
-    ? selectedNodeId : null;
+  const selectedBuilding = selectedBuildingOf(selection, nodes);
 
   return (
     <>
@@ -332,17 +400,15 @@ function MapInteraction({
         const a = nodes.find(n => n.nodeId === edge.nodeA);
         const b = nodes.find(n => n.nodeId === edge.nodeB);
         if (!a?.gps || !b?.gps) return null;
-        const selected = selection?.kind === 'edge' && selection.id === edge.id;
-        // Con un edificio elegido se resaltan sus caminos: ahí se marca la entrada
-        const ofBuilding = !!selectedBuilding && (edge.nodeA === selectedBuilding || edge.nodeB === selectedBuilding);
+        const look = editorEdgeLook(edge, selection, selectedBuilding);
         return (
           <Polyline
             key={edge.id}
             positions={[[a.gps.lat, a.gps.lng], [b.gps.lat, b.gps.lng]]}
             pathOptions={{
-              color: selected ? '#F59E0B' : ofBuilding ? '#8B5CF6' : '#00d084',
-              weight: selected || ofBuilding ? 7 : 5,
-              opacity: 0.9,
+              color: look.color,
+              weight: look.width,
+              opacity: look.opacity,
               bubblingMouseEvents: false,
             }}
             eventHandlers={{ click: e => onEdgeClick(edge, e.latlng.lat, e.latlng.lng) }}
@@ -428,7 +494,9 @@ const TILE_LAYERS = {
 type TileLayerType = keyof typeof TILE_LAYERS;
 
 // ── User Navigation Preview Panel ────────────────────────────
-function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) {
+function UserNavPreview({
+  nodes, edges, view3d, onView3d,
+}: { nodes: GraphNode[]; edges: GraphEdge[]; view3d: boolean; onView3d: (v: boolean) => void }) {
   const { data: rooms = [] } = useQuery({
     queryKey: ['rooms'],
     queryFn: roomService.getAll,
@@ -448,27 +516,23 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
 
 
   const [destNodeId, setDestNodeId] = useState('');
-  const [route, setRoute] = useState<import('../utils/dijkstra').RouteResult | null>(null);
   const [simPos, setSimPos] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [mapLayer, setMapLayer] = useState<TileLayerType>('street');
 
-  const calculateRoute = useCallback(() => {
-    if (!destNodeId || !simPos) return;
-    // If outside campus → start at nearest ENTRANCE; if inside → start at nearest node
-    const startId = findStartNode(nodes, simPos.lat, simPos.lng);
-    const result = dijkstra(nodes, edges, startId, destNodeId);
-    // Add last-mile: user GPS → first node of the route
-    const firstNode = nodes.find(n => n.nodeId === startId);
-    const lastMile = firstNode?.gps
-      ? haversineDistance(simPos.lat, simPos.lng, firstNode.gps.lat, firstNode.gps.lng)
-      : 0;
-    setRoute({ ...result, lastMileMeters: lastMile, totalDistMeters: result.totalDistMeters + lastMile });
-  }, [destNodeId, simPos, nodes, edges]);
+  // Mismo grafo que carga la app (solo activos con GPS) y mismo algoritmo (utils/campus-routing.ts)
+  const graph = useMemo(() => buildRoutingGraph(
+    nodes.filter(n => n.active !== false && n.gps).map(n => ({ id: n.nodeId, gps: n.gps, label: n.label, nodeType: n.nodeType })),
+    edges.filter(e => e.active !== false).map(e => [e.nodeA, e.nodeB] as [string, string]),
+  ), [nodes, edges]);
 
-  useEffect(() => {
-    if (destNodeId && simPos) calculateRoute();
-  }, [destNodeId, simPos, calculateRoute]);
+  // A un edificio la app llega por su puerta más conveniente
+  const route = useMemo(() => {
+    if (!destNodeId || !simPos) return null;
+    return nodeTypeOf(graph, destNodeId) === 'BUILDING'
+      ? routeToBuilding(graph, simPos.lat, simPos.lng, destNodeId)
+      : routeToNode(graph, simPos.lat, simPos.lng, destNodeId);
+  }, [graph, destNodeId, simPos]);
 
   const handleLocate = () => {
     if (!navigator.geolocation) return;
@@ -488,18 +552,25 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
     setSimPos({ lat, lng });
   };
 
-  // Route polyline positions
-  const routePositions: [number, number][] = (route?.nodeIds ?? [])
-    .map(id => nodes.find(n => n.nodeId === id))
-    .filter((n): n is GraphNode => !!n?.gps)
-    .map(n => [n.gps!.lat, n.gps!.lng]);
+  // Polilínea como en la app: usuario → punto donde entra al sendero → nodos
+  const routePath = useMemo(() => {
+    if (!route || !simPos) return [];
+    const pts = [simPos, ...(route.startVia ? [route.startVia] : [])];
+    for (const id of route.nodeIds) {
+      const gps = graph.nodes.get(id)?.gps;
+      if (gps) pts.push(gps);
+    }
+    return pts;
+  }, [route, simPos, graph]);
+  const routePositions = useMemo(() => routePath.map(p => [p.lat, p.lng] as [number, number]), [routePath]);
+  const routeEnd = route?.nodeIds[route.nodeIds.length - 1];
 
-  // Add simulated user position as first point
-  if (simPos && routePositions.length > 0) {
-    routePositions.unshift([simPos.lat, simPos.lng]);
-  }
-
-  // destNode available for popup use
+  const previewNodeLook = (node: GraphNode): NodeLook =>
+    node.nodeId === destNodeId || node.nodeId === routeEnd
+      ? { color: '#EF4444', border: '#B91C1C', size: 20, ring: true }
+      : route?.nodeIds.includes(node.nodeId)
+        ? { color: '#00d084', border: '#004628', size: 14, ring: true }
+        : typeLook(node.nodeType);
 
   const center: [number, number] =
     nodes.length > 0
@@ -525,23 +596,26 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
           </Alert>
         </Box>
 
-        {/* Layer toggle */}
-        <Box sx={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1000 }}>
-          <Tooltip title={mapLayer === 'street' ? 'Vista satelital' : 'Vista mapa'} placement="left">
-            <IconButton
-              onClick={() => setMapLayer(l => l === 'street' ? 'satellite' : 'street')}
-              sx={{
-                bgcolor: '#fff',
-                border: '1px solid #E5E7EB',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                '&:hover': { bgcolor: '#F8F9FB' },
-              }}
-            >
-              {mapLayer === 'street' ? <SatelliteAltRoundedIcon sx={{ fontSize: 20 }} /> : <MapRoundedIcon sx={{ fontSize: 20 }} />}
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <MapViewControls
+          view3d={view3d}
+          onView3d={onView3d}
+          layer={mapLayer}
+          onLayer={() => setMapLayer(l => l === 'street' ? 'satellite' : 'street')}
+        />
 
+        {view3d ? (
+          <CampusMap3D
+            nodes={nodes}
+            edges={edges}
+            satellite={mapLayer === 'satellite'}
+            nodeLook={previewNodeLook}
+            nodeTitle={n => `${nodeName(n)} · ${NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType}`}
+            edgeLook={() => ({ color: '#64748B', width: 4, opacity: 0.6 })}
+            route={routePath}
+            userPos={simPos}
+            onMapClick={handleSimClick}
+          />
+        ) : (
         <MapContainer center={center} zoom={18} maxZoom={22} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer
             key={mapLayer}
@@ -582,15 +656,9 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
           {/* All nodes (faded) */}
           {nodes.map(node => {
             if (!node.gps) return null;
-            const isOnRoute = route?.nodeIds.includes(node.nodeId);
-            const isDest = node.nodeId === destNodeId;
-            const icon = isDest
-              ? makeIcon('#EF4444', '#B91C1C', 20, true)
-              : isOnRoute
-              ? makeIcon('#00d084', '#004628', 14, true)
-              : icons[node.nodeType] ?? icons.WAYPOINT;
+            const look = previewNodeLook(node);
             return (
-              <Marker key={node.nodeId} position={[node.gps.lat, node.gps.lng]} icon={icon}>
+              <Marker key={node.nodeId} position={[node.gps.lat, node.gps.lng]} icon={makeIcon(look.color, look.border, look.size, look.ring)}>
                 <Popup>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{node.nodeId}</Typography>
                   {node.label && <Typography sx={{ fontSize: '0.75rem' }}>{node.label}</Typography>}
@@ -620,6 +688,7 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
             </Marker>
           )}
         </MapContainer>
+        )}
       </Box>
 
       {/* Right panel */}
@@ -728,10 +797,14 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
           <Divider sx={{ my: 1.5 }} />
 
           {/* Route result */}
-          {route && route.nodeIds.length > 0 ? (
+          {route && !route.direct ? (
             <>
-              <Typography sx={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary', mb: 1.5 }}>
+              <Typography sx={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary', mb: 0.5 }}>
                 Ruta calculada
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                {routeLabel(graph, route)}
+                {routeEnd && nodeTypeOf(graph, routeEnd) === 'DOOR' && ` · termina en ${graph.nodes.get(routeEnd)?.label || routeEnd}`}
               </Typography>
 
               {/* Summary cards */}
@@ -743,7 +816,7 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
                   }}
                 >
                   <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: '#00d084', lineHeight: 1 }}>
-                    {formatDistance(route.totalDistMeters)}
+                    {formatDistance(route.totalDist)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">Distancia</Typography>
                 </Box>
@@ -754,7 +827,7 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
                   }}
                 >
                   <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: '#3B82F6', lineHeight: 1 }}>
-                    {formatETA(route.totalDistMeters)}
+                    {formatEta(route.totalDist)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">A pie</Typography>
                 </Box>
@@ -822,13 +895,13 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
             </>
           ) : destNodeId && simPos ? (
             <Alert severity="warning" sx={{ borderRadius: '10px', fontSize: '0.75rem' }}>
-              No se encontró ruta entre los nodos seleccionados. Verifica que el grafo esté conectado.
+              No hay camino en el grafo hasta ese destino: la app mostraría una línea recta. Verifica que el grafo esté conectado.
             </Alert>
           ) : (
             <Box sx={{ textAlign: 'center', py: 3 }}>
               <DirectionsWalkRoundedIcon sx={{ fontSize: 36, color: '#D1D5DB', mb: 1 }} />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Selecciona un destino y una posición de inicio para calcular la ruta óptima con Dijkstra
+                Selecciona un destino y una posición de inicio para calcular la ruta con el mismo algoritmo de la app
               </Typography>
             </Box>
           )}
@@ -842,7 +915,7 @@ function UserNavPreview({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge
               variant="outlined"
               size="small"
               sx={{ borderRadius: '100px', textTransform: 'none', color: 'text.secondary', borderColor: '#E5E7EB' }}
-              onClick={() => { setSimPos(null); setRoute(null); setDestNodeId(''); }}
+              onClick={() => { setSimPos(null); setDestNodeId(''); }}
             >
               Reiniciar simulación
             </Button>
@@ -1201,6 +1274,7 @@ export default function MapPage() {
   const tab: MapTab = MAP_TABS.some(t => t.value === params.get('tab')) ? params.get('tab') as MapTab : 'editor';
   const setTab = (v: MapTab) => setParams(v === 'editor' ? {} : { tab: v }, { replace: true });
   const [mapLayer, setMapLayer] = useState<TileLayerType>('street');
+  const [view3d, setView3d] = useView3d();
   const [selection, setSelection] = useState<Selection>(null);
   const [drawing, setDrawing] = useState<Drawing>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -1441,7 +1515,7 @@ export default function MapPage() {
       {tab === 'ar' ? (
         <PoiEditorPage />
       ) : tab === 'preview' ? (
-        <UserNavPreview nodes={nodes} edges={edges} />
+        <UserNavPreview nodes={rawNodes} edges={edges} view3d={view3d} onView3d={setView3d} />
       ) : tab === 'pixel' ? (
         <PixelMapEditor nodes={nodes} edges={edges} onUpdatePixel={handlePixelUpdate} />
       ) : (
@@ -1480,23 +1554,31 @@ export default function MapPage() {
             </Box>
           )}
 
-          {/* Layer toggle */}
-          <Box sx={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1000 }}>
-            <Tooltip title={mapLayer === 'street' ? 'Vista satelital (ESRI)' : 'Vista mapa'} placement="left">
-              <IconButton
-                onClick={() => setMapLayer(l => l === 'street' ? 'satellite' : 'street')}
-                sx={{
-                  bgcolor: '#fff',
-                  border: '1px solid #E5E7EB',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  '&:hover': { bgcolor: '#F8F9FB' },
-                }}
-              >
-                {mapLayer === 'street' ? <SatelliteAltRoundedIcon sx={{ fontSize: 20 }} /> : <MapRoundedIcon sx={{ fontSize: 20 }} />}
-              </IconButton>
-            </Tooltip>
-          </Box>
+          <MapViewControls
+            view3d={view3d}
+            onView3d={setView3d}
+            layer={mapLayer}
+            onLayer={() => setMapLayer(l => l === 'street' ? 'satellite' : 'street')}
+          />
 
+          {view3d ? (
+            <CampusMap3D
+              nodes={nodes}
+              edges={edges}
+              satellite={mapLayer === 'satellite'}
+              nodeLook={n => (n.nodeId === selectedNode?.nodeId || n.nodeId === drawing?.from ? SELECTED_LOOK : typeLook(n.nodeType))}
+              nodeTitle={n => `${nodeName(n)} · ${NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType}`}
+              edgeLook={e => editorEdgeLook(e, selection, selectedBuildingOf(selection, nodes))}
+              pin={selection?.kind === 'edge' ? { lat: selection.lat, lng: selection.lng } : null}
+              rubberFrom={drawing?.from ? findNode(drawing.from)?.gps ?? null : null}
+              draggable={!drawing}
+              focus={focus}
+              onMapClick={handleMapClick}
+              onNodeClick={handleNodeClick}
+              onEdgeClick={handleEdgeClick}
+              onNodeDragEnd={handleNodeDragEnd}
+            />
+          ) : (
           <MapContainer
             center={center}
             zoom={18}
@@ -1523,6 +1605,7 @@ export default function MapPage() {
               onNodeDragEnd={handleNodeDragEnd}
             />
           </MapContainer>
+          )}
         </Box>
 
         {/* ── Right panel: opciones de lo que se tocó en el mapa ── */}
