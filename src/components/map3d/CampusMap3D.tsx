@@ -5,7 +5,7 @@ import type { Feature, FeatureCollection } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GraphEdge, GraphNode } from '../../types';
 import { FOOT_WAYS, type CampusOsm } from '../../utils/campus-osm';
-import { DOOR_EXTRA_PX, doorIconHtml } from './doorIcon';
+import { nodeBadgeHtml } from './doorIcon';
 
 // Misma vista que el mapa exterior de la app (uco-map-app/src/navigation/outdoor-map.ts)
 const STREET_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -28,7 +28,7 @@ const SATELLITE_STYLE: StyleSpecification = {
 
 type LatLng = { lat: number; lng: number };
 
-export interface NodeLook { color: string; border: string; size: number; ring?: boolean; door?: boolean; }
+export interface NodeLook { color: string; border: string; size: number; ring?: boolean; badge?: string | null; }
 export interface EdgeLook { color: string; width: number; opacity?: number; }
 
 interface Props {
@@ -198,9 +198,9 @@ function dotElement(look: NodeLook, title: string): HTMLDivElement {
 
 function styleDot(el: HTMLElement, look: NodeLook) {
   const inner = el.firstChild as HTMLElement;
-  if (look.door) {
+  if (look.badge) {
     inner.style.cssText = '';
-    inner.innerHTML = doorIconHtml(look.color, look.border, look.size + DOOR_EXTRA_PX, look.ring);
+    inner.innerHTML = look.badge;
     return;
   }
   inner.innerHTML = '';
@@ -354,7 +354,8 @@ export default function CampusMap3D(props: Props) {
     for (const n of nodes) {
       if (!n.gps) continue;
       seen.add(n.nodeId);
-      const look = { ...nodeLook(n), door: n.nodeType === 'DOOR' };
+      const base = nodeLook(n);
+      const look = { ...base, badge: nodeBadgeHtml(n, base.color, base.border, base.size, base.ring) };
       const title = nodeTitle?.(n) ?? n.label ?? n.nodeId;
       const key = JSON.stringify([look, title]);
       const cur = markers.get(n.nodeId);

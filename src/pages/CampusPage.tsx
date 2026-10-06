@@ -124,7 +124,7 @@ function BuildingFormDialog({ open, onClose, building }: { open: boolean; onClos
               rules={{ required: 'Requerido' }}
               render={({ field }) => (
                 <TextField {...field} label="Categoría" fullWidth placeholder="CO, EDC, Otros..."
-                  error={!!errors.category} helperText={errors.category?.message ?? 'La misma de sus salones'} />
+                  error={!!errors.category} helperText={errors.category?.message ?? 'La misma de sus lugares'} />
               )}
             />
             <Controller
@@ -172,7 +172,6 @@ interface RoomFormData {
   roomId: string;
   name: string;
   category: string;
-  stateId: string;
   modelUrl: string;
 }
 
@@ -191,7 +190,6 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
     roomId: room?.roomId ?? '',
     name: room?.name ?? '',
     category: room?.category ?? (buildings[0]?.category ?? ''),
-    stateId: room?.stateId ?? '',
     modelUrl: room?.modelUrl ?? '',
   };
 
@@ -213,10 +211,10 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
 
   const onSubmit = (formData: RoomFormData) => {
     const payload: Partial<Room> = {
-      roomId: formData.roomId,
-      name: formData.name,
+      roomId: isEdit ? room!.roomId : formData.roomId.trim(),
+      name: formData.name.trim(),
       category: formData.category,
-      stateId: formData.stateId,
+      stateId: room?.stateId,
       modelUrl: formData.modelUrl || undefined,
       arPosition: room?.arPosition ?? null,
       active: true,
@@ -238,7 +236,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
               control={control}
               rules={{ required: 'Requerido' }}
               render={({ field }) => (
-                <TextField {...field} label="ID del salón" fullWidth disabled={isEdit}
+                <TextField {...field} label="ID del lugar" fullWidth disabled={isEdit}
                   error={!!errors.roomId} helperText={errors.roomId?.message}
                   placeholder="205, L2, EDC..." />
               )}
@@ -262,19 +260,9 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
             control={control}
             rules={{ required: 'Requerido' }}
             render={({ field }) => (
-              <TextField {...field} label="Nombre del salón" fullWidth
+              <TextField {...field} label="Nombre del lugar" fullWidth
                 error={!!errors.name} helperText={errors.name?.message}
                 placeholder="Sala de sistemas, Biblioteca..." />
-            )}
-          />
-          <Controller
-            name="stateId"
-            control={control}
-            rules={{ required: 'Requerido' }}
-            render={({ field }) => (
-              <TextField {...field} label="State ID (clip AR)" fullWidth
-                error={!!errors.stateId}
-                placeholder="room_205, library..." />
             )}
           />
           {mutError && (
@@ -285,7 +273,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
       <DialogActions>
         <Button variant="outlined" onClick={onClose} disabled={pending}>Cancelar</Button>
         <Button variant="contained" onClick={handleSubmit(onSubmit)} disabled={pending}>
-          {pending ? 'Guardando...' : isEdit ? 'Actualizar' : 'Crear salón'}
+          {pending ? 'Guardando...' : isEdit ? 'Actualizar' : 'Crear lugar'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -544,7 +532,6 @@ function RoomsTab() {
               <TableCell>ID</TableCell>
               <TableCell>Nombre</TableCell>
               <TableCell>Edificio</TableCell>
-              <TableCell>State ID</TableCell>
               <TableCell>Estado</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
@@ -553,7 +540,7 @@ function RoomsTab() {
             {isLoading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <TableCell key={j}><Skeleton variant="text" width="80%" /></TableCell>
                     ))}
                   </TableRow>
@@ -568,9 +555,6 @@ function RoomsTab() {
                         size="small"
                         sx={{ bgcolor: '#F3F4F6', color: '#374151' }}
                       />
-                    </TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
-                      {room.stateId}
                     </TableCell>
                     <TableCell>
                       <Tooltip title={room.active ? 'Desactivar' : 'Activar'}>
@@ -606,7 +590,7 @@ function RoomsTab() {
         </Table>
         {!isLoading && filtered.length === 0 && (
           <Box sx={{ py: 6, textAlign: 'center' }}>
-            <Typography color="text.secondary" variant="body2">No se encontraron salones con los filtros aplicados.</Typography>
+            <Typography color="text.secondary" variant="body2">No se encontraron lugares con los filtros aplicados.</Typography>
           </Box>
         )}
       </Paper>
@@ -618,14 +602,14 @@ function RoomsTab() {
       />
 
       <Dialog open={!!deleteConfirm} onClose={() => { setDeleteConfirm(null); setDeleteError(null); }} maxWidth="xs" fullWidth>
-        <DialogTitle>Eliminar salón</DialogTitle>
+        <DialogTitle>Eliminar lugar</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
             ¿Estás seguro de que deseas eliminar permanentemente{' '}
             <strong>{deleteConfirm?.name}</strong> ({deleteConfirm?.roomId})?
           </Typography>
           <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 1 }}>
-            Esta acción no se puede deshacer. El salón será eliminado de la base de datos
+            Esta acción no se puede deshacer. El lugar será eliminado de la base de datos
             y dejará de estar disponible en la aplicación.
           </Typography>
           {deleteError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>{deleteError}</Alert>}

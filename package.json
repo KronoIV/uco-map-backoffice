@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "check:routing": "cmp src/utils/campus-routing.ts ../uco-map-app/src/navigation/campus-routing.ts && cmp src/utils/campus-osm.ts ../uco-map-app/src/navigation/campus-osm.ts && echo 'campus-routing.ts y campus-osm.ts: iguales a los de la app'",
+    "check:routing": "cmp src/utils/campus-routing.ts ../uco-map-app/src/navigation/campus-routing.ts && cmp src/utils/campus-osm.ts ../uco-map-app/src/navigation/campus-osm.ts && cmp src/utils/poi-catalog.ts ../uco-map-app/src/navigation/poi-catalog.ts && echo 'campus-routing.ts, campus-osm.ts y poi-catalog.ts: iguales a los de la app'",
     "preview": "vite preview"
   },
   "dependencies": {

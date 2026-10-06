@@ -25,7 +25,7 @@ export interface PixelPoint {
 
 // ──────────────── Graph ───────────────────────────────────────
 /** DOOR: puerta de un edificio sobre la fachada, conectada a su nodo BUILDING (ahí termina la ruta exterior). */
-export type NodeType = 'BUILDING' | 'DOOR' | 'ENTRANCE' | 'WAYPOINT';
+export type NodeType = 'BUILDING' | 'DOOR' | 'ENTRANCE' | 'WAYPOINT' | 'POI';
 
 export interface GraphNode {
   nodeId: string;
@@ -33,6 +33,10 @@ export interface GraphNode {
   pixel: PixelPoint;
   label?: string;
   nodeType: NodeType;
+  /** Solo POI: clave de su clase (catálogo en utils/poi-catalog.ts). */
+  poiType?: string | null;
+  /** Solo POI: edificio (buildingId) que lo contiene; vacío = al aire libre. */
+  buildingId?: string | null;
   active: boolean;
 }
 

@@ -25,12 +25,14 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import { graphService } from '../services/graphService';
 import { roomService } from '../services/roomService';
-import type { GraphNode, GraphEdge, NodeType } from '../types';
+import { buildingService } from '../services/buildingService';
+import type { Building, GraphNode, GraphEdge, NodeType } from '../types';
 import PageHeader from '../components/PageHeader';
 import SectionTabs, { type SectionTab } from '../components/SectionTabs';
 import PoiEditorPage from './PoiEditorPage';
 import CampusMap3D, { type EdgeLook, type NodeLook } from '../components/map3d/CampusMap3D';
-import { DOOR_EXTRA_PX, doorIconHtml } from '../components/map3d/doorIcon';
+import { DOOR_EXTRA_PX, doorIconHtml, nodeBadgeHtml, poiIconHtml } from '../components/map3d/doorIcon';
+import { POI_TYPES, poiTypeOf } from '../utils/poi-catalog';
 import {
   buildRoutingGraph, routeToBuilding, routeToNode, routeLabel, nodeTypeOf, haversineDistance, formatDistance, walkingMinutes,
 } from '../utils/campus-routing';
@@ -46,15 +48,14 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function makeIcon(color: string, borderColor: string, size: number, ring = false, door = false) {
-  const s = door ? size + DOOR_EXTRA_PX : size;
+function makeIcon(color: string, borderColor: string, size: number, ring = false, badge: string | null = null) {
+  const s = badge ? size + DOOR_EXTRA_PX : size;
   const ringStyle = ring
     ? `box-shadow:0 0 0 3px ${color}55, 0 0 0 5px ${color}22;`
     : '';
   return L.divIcon({
-    html: door
-      ? doorIconHtml(color, borderColor, s, ring)
-      : `<div style="background:${color};border:2px solid ${borderColor};border-radius:50%;width:${s}px;height:${s}px;${ringStyle}transition:transform 0.1s;"></div>`,
+    html: badge
+      ?? `<div style="background:${color};border:2px solid ${borderColor};border-radius:50%;width:${s}px;height:${s}px;${ringStyle}transition:transform 0.1s;"></div>`,
     iconSize: [s, s],
     iconAnchor: [s / 2, s / 2],
     className: '',
@@ -66,30 +67,78 @@ const NODE_TYPE_META: Record<NodeType, { label: string; help: string; color: str
   DOOR: { label: 'Entrada de edificio', help: 'Por donde se entra; va sobre la fachada', color: '#8B5CF6', border: '#5B21B6', size: 14 },
   BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: '#00d084', border: '#004628', size: 18 },
   ENTRANCE: { label: 'Entrada al campus', help: 'Portería o acceso desde la calle', color: '#3B82F6', border: '#1E40AF', size: 14 },
+  POI: { label: 'Punto de interés', help: 'Cafetería u otro lugar que la app lista aparte', color: '#B45309', border: '#78350F', size: 14 },
 };
 const NODE_TYPES = Object.keys(NODE_TYPE_META) as NodeType[];
 
-const icons = Object.fromEntries(
-  NODE_TYPES.map(t => [t, makeIcon(NODE_TYPE_META[t].color, NODE_TYPE_META[t].border, NODE_TYPE_META[t].size, false, t === 'DOOR')]),
-) as Record<NodeType, L.DivIcon>;
+type NodeKind = Pick<GraphNode, 'nodeType' | 'poiType'>;
 
-const selectedIcon = makeIcon('#F59E0B', '#D97706', 18, true);
-const selectedDoorIcon = makeIcon('#F59E0B', '#D97706', 18, true, true);
-
-/** Muestra de color de un tipo de punto: las entradas de edificio llevan el dibujo de la puerta, como en el mapa. */
-function TypeSwatch({ type, size }: { type: NodeType; size: number }) {
-  const m = NODE_TYPE_META[type] ?? NODE_TYPE_META.WAYPOINT;
-  if (type === 'DOOR') {
-    return <Box sx={{ flexShrink: 0, display: 'flex' }} dangerouslySetInnerHTML={{ __html: doorIconHtml(m.color, m.border, size + 4) }} />;
+const iconCache = new Map<string, L.DivIcon>();
+/** Icono Leaflet de un punto (puerta, emoji de su clase o círculo), uno por apariencia. */
+function nodeIcon(node: NodeKind, look: NodeLook): L.DivIcon {
+  const badge = nodeBadgeHtml(node, look.color, look.border, look.size, look.ring);
+  const key = `${look.color}|${look.border}|${look.size}|${look.ring}|${badge}`;
+  let icon = iconCache.get(key);
+  if (!icon) {
+    icon = makeIcon(look.color, look.border, look.size, look.ring, badge);
+    iconCache.set(key, icon);
   }
+  return icon;
+}
+
+/** Muestra de un tipo de punto con el mismo dibujo del mapa (puerta, emoji del POI o círculo). */
+function TypeSwatch({ type, size, poiType }: { type: NodeType; size: number; poiType?: string | null }) {
+  const m = NODE_TYPE_META[type] ?? NODE_TYPE_META.WAYPOINT;
+  const html = type === 'DOOR' ? doorIconHtml(m.color, m.border, size + 4)
+    : type === 'POI' ? poiIconHtml(poiTypeOf(poiType ?? POI_TYPES[0]?.key).emoji, poiTypeOf(poiType ?? POI_TYPES[0]?.key).color, size + 6)
+    : null;
+  if (html) return <Box sx={{ flexShrink: 0, display: 'flex' }} dangerouslySetInnerHTML={{ __html: html }} />;
   return <Box sx={{ width: size, height: size, borderRadius: '50%', bgcolor: m.color, border: `2px solid ${m.border}`, flexShrink: 0 }} />;
 }
 
-// Mismos colores en el mapa 3D que en el 2D
-const typeLook = (t: NodeType): NodeLook => {
-  const m = NODE_TYPE_META[t] ?? NODE_TYPE_META.WAYPOINT;
-  return { color: m.color, border: m.border, size: m.size };
+// Mismos colores en el mapa 3D que en el 2D; cada clase de POI con su color del catálogo
+const typeLook = (n: NodeKind): NodeLook => {
+  const m = NODE_TYPE_META[n.nodeType] ?? NODE_TYPE_META.WAYPOINT;
+  return { color: n.nodeType === 'POI' ? poiTypeOf(n.poiType).color : m.color, border: m.border, size: m.size };
 };
+
+const nodeTypeLabel = (n: NodeKind) =>
+  n.nodeType === 'POI' ? poiTypeOf(n.poiType).label : NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType;
+
+/** Clase y ubicación de un punto de interés: lo que la app usa para listarlo y trazar la ruta. */
+function PoiFields({
+  node, neighbors, buildings, disabled, onChange,
+}: {
+  node: GraphNode;
+  neighbors: number;
+  buildings: Building[];
+  disabled: boolean;
+  onChange: (patch: Pick<GraphNode, 'poiType' | 'buildingId'>) => void;
+}) {
+  const known = POI_TYPES.some(t => t.key === node.poiType);
+  const building = buildings.find(b => b.buildingId === node.buildingId);
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <TextField select size="small" label="Clase" value={node.poiType ?? ''} disabled={disabled}
+        onChange={e => onChange({ poiType: e.target.value, buildingId: node.buildingId ?? null })}>
+        {POI_TYPES.map(t => <MenuItem key={t.key} value={t.key}>{t.emoji} {t.label}</MenuItem>)}
+        {!known && node.poiType && <MenuItem value={node.poiType}>{poiTypeOf(node.poiType).emoji} {node.poiType}</MenuItem>}
+      </TextField>
+      <TextField select size="small" label="Ubicación" value={node.buildingId ?? ''} disabled={disabled}
+        onChange={e => onChange({ poiType: node.poiType ?? null, buildingId: e.target.value || null })}>
+        <MenuItem value="">Al aire libre</MenuItem>
+        {buildings.map(b => <MenuItem key={b.buildingId} value={b.buildingId}>Dentro de {b.label}</MenuItem>)}
+      </TextField>
+      <Alert severity={building || neighbors > 0 ? 'success' : 'warning'} sx={alertSx}>
+        {building
+          ? `La app guía hasta ${building.label} y allí indica buscar «${nodeName(node)}».`
+          : neighbors > 0
+            ? 'La ruta llega hasta este punto por los senderos.'
+            : 'Sin camino: únelo a un sendero con «Dibujar camino desde aquí» o la app trazará una línea recta.'}
+      </Alert>
+    </Box>
+  );
+}
 const SELECTED_LOOK: NodeLook = { color: '#F59E0B', border: '#D97706', size: 18, ring: true };
 
 /** Igual que la app: «N min» a 1.2 m/s. */
@@ -242,14 +291,16 @@ const alertSx = { py: 0, fontSize: '0.75rem', borderRadius: '10px' };
 const pillSx = { textTransform: 'none', borderRadius: '100px', fontWeight: 600 } as const;
 
 function NodeDetails({
-  node, nodes, edges, busy, onRename, onChangeType, onDrawFrom, onDelete, onSelect,
+  node, nodes, edges, buildings, busy, onRename, onChangeType, onPoiChange, onDrawFrom, onDelete, onSelect,
 }: {
   node: GraphNode;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  buildings: Building[];
   busy: boolean;
   onRename: (nodeId: string, label: string) => void;
   onChangeType: (nodeId: string, type: NodeType) => void;
+  onPoiChange: (nodeId: string, patch: Pick<GraphNode, 'poiType' | 'buildingId'>) => void;
   onDrawFrom: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
   onSelect: (nodeId: string) => void;
@@ -269,7 +320,7 @@ function NodeDetails({
         size="small"
         label="Nombre"
         defaultValue={node.label ?? ''}
-        placeholder={node.nodeType === 'DOOR' ? 'Entrada principal' : 'Opcional'}
+        placeholder={node.nodeType === 'DOOR' ? 'Entrada principal' : node.nodeType === 'POI' ? `${poiTypeOf(node.poiType).label} central` : 'Opcional'}
         helperText={`Identificador: ${node.nodeId}`}
         onBlur={e => save(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
@@ -278,6 +329,10 @@ function NodeDetails({
         <SectionLabel>¿Qué es este punto?</SectionLabel>
         <TypePicker value={node.nodeType} onChange={t => onChangeType(node.nodeId, t)} />
       </Box>
+      {node.nodeType === 'POI' && (
+        <PoiFields node={node} neighbors={near.length} buildings={buildings} disabled={busy}
+          onChange={patch => onPoiChange(node.nodeId, patch)} />
+      )}
       {status && <Alert severity={status.ok ? 'success' : 'warning'} sx={alertSx}>{status.text}</Alert>}
       {node.nodeType === 'BUILDING' && (
         <Alert severity={doors > 0 ? 'success' : 'info'} sx={alertSx}>
@@ -495,7 +550,7 @@ function MapInteraction({
           <Marker
             key={node.nodeId}
             position={[node.gps.lat, node.gps.lng]}
-            icon={highlighted ? (node.nodeType === 'DOOR' ? selectedDoorIcon : selectedIcon) : icons[node.nodeType] ?? icons.WAYPOINT}
+            icon={nodeIcon(node, highlighted ? SELECTED_LOOK : typeLook(node))}
             draggable={!drawing}
             eventHandlers={{
               click: () => onNodeClick(node.nodeId),
@@ -506,7 +561,7 @@ function MapInteraction({
             }}
           >
             <MapTooltip direction="top" offset={[0, -8]}>
-              {nodeName(node)} · {NODE_TYPE_META[node.nodeType]?.label ?? node.nodeType}
+              {nodeName(node)} · {nodeTypeLabel(node)}
             </MapTooltip>
           </Marker>
         );
@@ -569,6 +624,16 @@ function UserNavPreview({
     .filter(n => n.nodeType === 'BUILDING')
     .map(n => ({ nodeId: n.nodeId, label: n.label ?? n.nodeId, group: 'Edificios' }));
 
+  const poiOptions = nodes
+    .filter(n => n.nodeType === 'POI')
+    .map(n => ({ nodeId: n.nodeId, label: `${poiTypeOf(n.poiType).emoji} ${nodeName(n)}` }));
+
+  const { data: buildings = [] } = useQuery({
+    queryKey: ['buildings'],
+    queryFn: () => buildingService.getAll(),
+    retry: false,
+  });
+
 
 
   const [destNodeId, setDestNodeId] = useState('');
@@ -583,13 +648,17 @@ function UserNavPreview({
     edges.filter(e => e.active !== false).map(e => [e.nodeA, e.nodeB] as [string, string]),
   ), [nodes, edges]);
 
-  // A un edificio la app llega por su puerta más conveniente
+  // A un edificio la app llega por su puerta más conveniente; a un POI dentro de un edificio, a ese edificio
   const route = useMemo(() => {
     if (!destNodeId || !simPos) return null;
-    return nodeTypeOf(graph, destNodeId) === 'BUILDING'
-      ? routeToBuilding(graph, simPos.lat, simPos.lng, destNodeId)
-      : routeToNode(graph, simPos.lat, simPos.lng, destNodeId);
-  }, [graph, destNodeId, simPos]);
+    const dest = nodes.find(n => n.nodeId === destNodeId);
+    const parent = dest?.nodeType === 'POI' && dest.buildingId
+      ? buildings.find(b => b.buildingId === dest.buildingId) : undefined;
+    const target = parent ? (parent.nodeId || parent.buildingId) : destNodeId;
+    return nodeTypeOf(graph, target) === 'BUILDING'
+      ? routeToBuilding(graph, simPos.lat, simPos.lng, target)
+      : routeToNode(graph, simPos.lat, simPos.lng, target);
+  }, [graph, destNodeId, simPos, nodes, buildings]);
 
   const handleLocate = () => {
     if (!navigator.geolocation) return;
@@ -627,7 +696,7 @@ function UserNavPreview({
       ? { color: '#EF4444', border: '#B91C1C', size: 20, ring: true }
       : route?.nodeIds.includes(node.nodeId)
         ? { color: '#00d084', border: '#004628', size: 14, ring: true }
-        : typeLook(node.nodeType);
+        : typeLook(node);
 
   const center: [number, number] =
     nodes.length > 0
@@ -667,7 +736,7 @@ function UserNavPreview({
             satellite={mapLayer === 'satellite'}
             osm={osm}
             nodeLook={previewNodeLook}
-            nodeTitle={n => `${nodeName(n)} · ${NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType}`}
+            nodeTitle={n => `${nodeName(n)} · ${nodeTypeLabel(n)}`}
             edgeLook={() => ({ color: '#64748B', width: 4, opacity: 0.6 })}
             route={routePath}
             userPos={simPos}
@@ -716,7 +785,7 @@ function UserNavPreview({
             if (!node.gps) return null;
             const look = previewNodeLook(node);
             return (
-              <Marker key={node.nodeId} position={[node.gps.lat, node.gps.lng]} icon={makeIcon(look.color, look.border, look.size, look.ring, node.nodeType === 'DOOR')}>
+              <Marker key={node.nodeId} position={[node.gps.lat, node.gps.lng]} icon={nodeIcon(node, look)}>
                 <Popup>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{node.nodeId}</Typography>
                   {node.label && <Typography sx={{ fontSize: '0.75rem' }}>{node.label}</Typography>}
@@ -792,6 +861,14 @@ function UserNavPreview({
               </MenuItem>
             )}
             {buildingOptions.map(opt => (
+              <MenuItem key={opt.nodeId} value={opt.nodeId}>{opt.label}</MenuItem>
+            ))}
+            {poiOptions.length > 0 && (
+              <MenuItem disabled sx={{ fontWeight: 700, fontSize: '0.7rem', opacity: 0.5, pointerEvents: 'none' }}>
+                PUNTOS DE INTERÉS
+              </MenuItem>
+            )}
+            {poiOptions.map(opt => (
               <MenuItem key={opt.nodeId} value={opt.nodeId}>{opt.label}</MenuItem>
             ))}
             {roomOptions.length > 0 && (
@@ -1335,6 +1412,8 @@ export default function MapPage() {
   const [view3d, setView3d] = useView3d();
   const [selection, setSelection] = useState<Selection>(null);
   const [drawing, setDrawing] = useState<Drawing>(null);
+  // Esperando el toque que ubica un punto de interés nuevo
+  const [placingPoi, setPlacingPoi] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState<{ lat: number; lng: number; n: number } | null>(null);
@@ -1351,6 +1430,12 @@ export default function MapPage() {
   const { data: edges = [] } = useQuery({
     queryKey: ['edges'],
     queryFn: () => graphService.getEdges(),
+    retry: false,
+  });
+
+  const { data: buildings = [] } = useQuery({
+    queryKey: ['buildings'],
+    queryFn: () => buildingService.getAll(),
     retry: false,
   });
 
@@ -1393,6 +1478,7 @@ export default function MapPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       setDrawing(null);
+      setPlacingPoi(false);
       setSelection(null);
     };
     window.addEventListener('keydown', onKey);
@@ -1423,7 +1509,7 @@ export default function MapPage() {
   };
 
   /** Parte un camino en dos con un punto nuevo donde se hizo clic. */
-  const insertOnEdge = async (edge: GraphEdge, lat: number, lng: number, nodeType: NodeType, label?: string) => {
+  const insertOnEdge = async (edge: GraphEdge, lat: number, lng: number, nodeType: NodeType, label?: string, extra: Partial<GraphNode> = {}) => {
     const a = findNode(edge.nodeA);
     const b = findNode(edge.nodeB);
     if (!a?.gps || !b?.gps) throw new Error('Camino sin extremos');
@@ -1437,6 +1523,7 @@ export default function MapPage() {
       label,
       nodeType,
       active: true,
+      ...extra,
     });
     await graphService.createEdge({ nodeA: edge.nodeA, nodeB: nodeId, active: true });
     await graphService.createEdge({ nodeA: nodeId, nodeB: edge.nodeB, active: true });
@@ -1446,10 +1533,33 @@ export default function MapPage() {
 
   const startDrawing = (from: string | null) => {
     setSelection(null);
+    setPlacingPoi(false);
     setDrawing({ from });
   };
 
+  const defaultPoiType = POI_TYPES[0]?.key ?? 'POI';
+
+  /** Punto de interés nuevo: sobre un camino queda unido a los senderos; en el mapa, suelto (p. ej. dentro de un edificio). */
+  const placePoi = (lat: number, lng: number, edge?: GraphEdge) => {
+    setPlacingPoi(false);
+    const label = poiTypeOf(defaultPoiType).label;
+    void run(async () => {
+      let nodeId: string;
+      if (edge) {
+        nodeId = await insertOnEdge(edge, lat, lng, 'POI', label, { poiType: defaultPoiType });
+      } else {
+        nodeId = newId('W');
+        await graphService.createNode({
+          nodeId, gps: { lat, lng }, pixel: { x: 0, y: 0 }, label, nodeType: 'POI', poiType: defaultPoiType, active: true,
+        });
+      }
+      setSelection({ kind: 'node', id: nodeId });
+      setNotice({ text: 'Punto de interés creado: ponle nombre y elige su clase y ubicación.', severity: 'success' });
+    }, 'No se pudo crear el punto de interés. Revisa la conexión.');
+  };
+
   const handleMapClick = (lat: number, lng: number) => {
+    if (placingPoi) { placePoi(lat, lng); return; }
     if (!drawing) { setSelection(null); return; }
     void run(async () => {
       const nodeId = newId('W');
@@ -1460,6 +1570,7 @@ export default function MapPage() {
   };
 
   const handleNodeClick = (nodeId: string) => {
+    if (placingPoi) setPlacingPoi(false);
     if (!drawing) { setSelection({ kind: 'node', id: nodeId }); return; }
     if (!drawing.from) { setDrawing({ from: nodeId }); return; }
     if (drawing.from === nodeId) return;
@@ -1473,6 +1584,7 @@ export default function MapPage() {
   };
 
   const handleEdgeClick = (edge: GraphEdge, lat: number, lng: number) => {
+    if (placingPoi) { placePoi(lat, lng, edge); return; }
     if (!drawing) { setSelection({ kind: 'edge', id: edge.id, lat, lng }); return; }
     const from = drawing.from;
     void run(async () => {
@@ -1498,7 +1610,17 @@ export default function MapPage() {
     const building = neighborsOf(nodeId, rawNodes, edges).find(n => n.nodeType === 'BUILDING');
     // Una entrada sin nombre toma el de su edificio para reconocerla en la lista
     const label = nodeType === 'DOOR' && !node.label && building ? `Entrada ${nodeName(building)}` : node.label;
-    updateNodeMutation.mutate({ id: nodeId, data: { ...node, nodeType, label } });
+    // Un punto de interés necesita clase: se arranca con la primera del catálogo
+    const poiType = nodeType === 'POI' ? node.poiType || defaultPoiType : null;
+    updateNodeMutation.mutate({
+      id: nodeId,
+      data: { ...node, nodeType, label: nodeType === 'POI' && !label ? poiTypeOf(poiType).label : label, poiType, buildingId: nodeType === 'POI' ? node.buildingId ?? null : null },
+    });
+  };
+
+  const handlePoiChange = (nodeId: string, patch: Pick<GraphNode, 'poiType' | 'buildingId'>) => {
+    const node = findNode(nodeId);
+    if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, ...patch } });
   };
 
   const handleRename = (nodeId: string, label: string) => {
@@ -1560,7 +1682,9 @@ export default function MapPage() {
             : 'Toca el mapa, un punto o un camino para empezar',
           severity: 'info',
         }
-      : notice;
+      : placingPoi
+        ? { text: 'Toca un camino para ponerlo sobre el sendero (al aire libre) o el mapa para un punto dentro de un edificio', severity: 'info' }
+        : notice;
 
   const selectedNode = selection?.kind === 'node' ? nodes.find(n => n.nodeId === selection.id) : undefined;
   const selectedEdge = selection?.kind === 'edge' ? edges.find(e => e.id === selection.id) : undefined;
@@ -1605,7 +1729,7 @@ export default function MapPage() {
           }}
         >
           {/* Toolbar */}
-          <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 1000 }}>
+          <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
             {drawing ? (
               <Button variant="contained" startIcon={<CheckRoundedIcon />} onClick={() => setDrawing(null)}
                 sx={{ ...pillSx, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
@@ -1615,6 +1739,14 @@ export default function MapPage() {
               <Button variant="contained" startIcon={<AltRouteRoundedIcon />} onClick={() => startDrawing(null)}
                 sx={{ ...pillSx, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
                 Dibujar camino
+              </Button>
+            )}
+            {!drawing && (
+              <Button variant={placingPoi ? 'contained' : 'outlined'} color={placingPoi ? 'warning' : 'primary'}
+                startIcon={placingPoi ? <CloseRoundedIcon /> : <PlaceRoundedIcon />}
+                onClick={() => { setSelection(null); setPlacingPoi(p => !p); }}
+                sx={{ ...pillSx, bgcolor: placingPoi ? undefined : '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                {placingPoi ? 'Cancelar' : 'Punto de interés'}
               </Button>
             )}
           </Box>
@@ -1640,8 +1772,8 @@ export default function MapPage() {
               edges={edges}
               satellite={mapLayer === 'satellite'}
               osm={osm}
-              nodeLook={n => (n.nodeId === selectedNode?.nodeId || n.nodeId === drawing?.from ? SELECTED_LOOK : typeLook(n.nodeType))}
-              nodeTitle={n => `${nodeName(n)} · ${NODE_TYPE_META[n.nodeType]?.label ?? n.nodeType}`}
+              nodeLook={n => (n.nodeId === selectedNode?.nodeId || n.nodeId === drawing?.from ? SELECTED_LOOK : typeLook(n))}
+              nodeTitle={n => `${nodeName(n)} · ${nodeTypeLabel(n)}`}
               edgeLook={e => editorEdgeLook(e, selection, selectedBuildingOf(selection, nodes), crossingIds.has(e.id))}
               pin={selection?.kind === 'edge' ? { lat: selection.lat, lng: selection.lng } : null}
               rubberFrom={drawing?.from ? findNode(drawing.from)?.gps ?? null : null}
@@ -1697,7 +1829,7 @@ export default function MapPage() {
         >
           <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1', display: 'flex', alignItems: 'center', gap: 1 }}>
             {selectedNode && (
-              <TypeSwatch type={selectedNode.nodeType} size={14} />
+              <TypeSwatch type={selectedNode.nodeType} poiType={selectedNode.poiType} size={14} />
             )}
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', flex: 1, minWidth: 0 }} noWrap>
               {selectedNode ? nodeName(selectedNode) : selectedEdge ? 'Camino' : 'Editar caminos'}
@@ -1716,9 +1848,11 @@ export default function MapPage() {
                 node={selectedNode}
                 nodes={nodes}
                 edges={edges}
+                buildings={buildings}
                 busy={busy}
                 onRename={handleRename}
                 onChangeType={handleChangeType}
+                onPoiChange={handlePoiChange}
                 onDrawFrom={id => startDrawing(id)}
                 onDelete={handleDeleteNode}
                 onSelect={id => selectNode(id, true)}
@@ -1740,6 +1874,7 @@ export default function MapPage() {
                   <li><b>Toca un punto o un camino</b> para ver sus opciones.</li>
                   <li><b>Arrastra un punto</b> para moverlo.</li>
                   <li><b>Dibujar camino</b> para agregar senderos nuevos.</li>
+                  <li><b>Punto de interés</b> para agregar cafeterías y otros lugares que la app lista aparte.</li>
                 </Box>
 
                 <Box>

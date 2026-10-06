@@ -54,8 +54,9 @@ export function walkingMinutes(meters: number): number {
     return Math.ceil(meters / WALKING_SPEED_MPS / 60);
 }
 
+/** Texto para el usuario: «mts», nunca «m» (se confunde con minutos). */
 export function formatDistance(meters: number): string {
-    return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+    return meters < 1000 ? `${Math.round(meters)} mts` : `${(meters / 1000).toFixed(1)} km`;
 }
 
 export function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
