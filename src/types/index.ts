@@ -50,6 +50,8 @@ export interface Building {
   color?: string;
   category?: string;
   gps?: GpsPoint;
+  /** Punto BUILDING del mapa que lo ubica (si falta, el mismo buildingId). */
+  nodeId?: string;
   active: boolean;
 }
 

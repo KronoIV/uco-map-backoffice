@@ -6,7 +6,6 @@ import ForgotPasswordPage from '../pages/ForgotPasswordPage';
 import ResetPasswordPage from '../pages/ResetPasswordPage';
 import DashboardPage from '../pages/DashboardPage';
 import MapPage from '../pages/MapPage';
-import NodesPage from '../pages/NodesPage';
 import SettingsPage from '../pages/SettingsPage';
 import ActivityPage from '../pages/ActivityPage';
 import CampusPage from '../pages/CampusPage';
@@ -29,7 +28,8 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <DashboardPage /> },
           { path: 'map', element: <MapPage /> },
-          { path: 'nodes', element: <NodesPage /> },
+          // Los puntos y caminos se administran en el mapa
+          { path: 'nodes', element: <Navigate to="/map" replace /> },
           { path: 'campus', element: <CampusPage /> },
           { path: 'ar-points', element: <Navigate to="/map?tab=ar" replace /> },
           { path: 'settings', element: <SettingsPage /> },

@@ -21,7 +21,7 @@ import SatelliteAltRoundedIcon from '@mui/icons-material/SatelliteAltRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
 import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
 import DoorFrontRoundedIcon from '@mui/icons-material/DoorFrontRounded';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import { graphService } from '../services/graphService';
 import { roomService } from '../services/roomService';
@@ -285,6 +285,13 @@ function NodeDetails({
             ? `${doors} entrada${doors > 1 ? 's' : ''}: la ruta termina en la más conveniente para el usuario.`
             : 'Aún no tiene entradas. Toca el camino morado que llega al edificio, justo donde cruza la fachada, y elige «Poner entrada aquí».'}
         </Alert>
+      )}
+      {node.nodeType === 'BUILDING' && (
+        <Typography variant="caption" color="text.secondary">
+          También aparece en{' '}
+          <RouterLink to="/campus" style={{ color: 'inherit', fontWeight: 600 }}>Campus → Edificios</RouterLink>
+          , donde se elige su color y la categoría de sus salones.
+        </Typography>
       )}
       {near.length > 0 && (
         <Box>
@@ -1353,6 +1360,18 @@ export default function MapPage() {
     return local ? { ...n, gps: local } : n;
   });
   const osm = useCampusOsm(rawNodes);
+
+  // Enlace desde Campus → Edificios: abre ese punto en el mapa (una vez por enlace)
+  const linkedNodeId = params.get('node');
+  const [openedLink, setOpenedLink] = useState<string | null>(null);
+  if (linkedNodeId && linkedNodeId !== openedLink && rawNodes.length > 0) {
+    setOpenedLink(linkedNodeId);
+    const gps = rawNodes.find(n => n.nodeId === linkedNodeId)?.gps;
+    if (gps) {
+      setSelection({ kind: 'node', id: linkedNodeId });
+      setFocus(f => ({ ...gps, n: (f?.n ?? 0) + 1 }));
+    }
+  }
 
   const updateNodeMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<GraphNode> }) =>

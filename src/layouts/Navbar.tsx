@@ -14,8 +14,6 @@ import { useAuth } from '../context/AuthContext';
 const routeMap: Record<string, string[]> = {
   '/': ['Dashboard'],
   '/map': ['Mapa'],
-  '/nodes': ['Navegación'],
-  '/nodes/new': ['Navegación', 'Nuevo'],
   '/campus': ['Campus'],
   '/settings': ['Configuración'],
   '/sessions': ['Actividad'],

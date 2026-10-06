@@ -13,7 +13,6 @@ import {
 } from '@mui/material';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
@@ -29,7 +28,6 @@ const SIDEBAR_COLLAPSED = 64;
 const navItems = [
   { label: 'Dashboard', icon: <DashboardRoundedIcon fontSize="small" />, path: '/' },
   { label: 'Mapa', icon: <MapRoundedIcon fontSize="small" />, path: '/map' },
-  { label: 'Navegación', icon: <PlaceRoundedIcon fontSize="small" />, path: '/nodes' },
   { label: 'Campus', icon: <ApartmentRoundedIcon fontSize="small" />, path: '/campus' },
   { label: 'Actividad', icon: <InsightsRoundedIcon fontSize="small" />, path: '/sessions' },
   { label: 'Usuarios', icon: <PeopleRoundedIcon fontSize="small" />, path: '/users' },

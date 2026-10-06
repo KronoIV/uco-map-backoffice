@@ -13,11 +13,28 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded';
 import MeetingRoomRoundedIcon from '@mui/icons-material/MeetingRoomRounded';
 import { useForm, Controller } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import { buildingService } from '../services/buildingService';
+import { graphService } from '../services/graphService';
 import { roomService } from '../services/roomService';
 import { resolveApiError } from '../services/api';
 import type { Building, Room } from '../types';
+
+/** Los edificios y sus puntos en el mapa se guardan juntos en el servidor: refrescar ambos. */
+function invalidateBuildings(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['buildings'] });
+  qc.invalidateQueries({ queryKey: ['nodes'] });
+  qc.invalidateQueries({ queryKey: ['edges'] });
+}
+
+const coordRule = (max: number) => ({
+  validate: (v: number) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n === 0) return 'Requerido: ubica el edificio';
+    return Math.abs(n) <= max || 'Coordenada fuera de rango';
+  },
+});
 
 // ─── Building Form Dialog ────────────────────────────────────────────────────
 
@@ -51,13 +68,13 @@ function BuildingFormDialog({ open, onClose, building }: { open: boolean; onClos
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Building>) => buildingService.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['buildings'] }); onClose(); reset(); },
+    onSuccess: () => { invalidateBuildings(qc); onClose(); reset(); },
     onError: (err) => setMutError(resolveApiError(err)),
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<Building>) => buildingService.update(building!.buildingId, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['buildings'] }); onClose(); },
+    onSuccess: () => { invalidateBuildings(qc); onClose(); },
     onError: (err) => setMutError(resolveApiError(err)),
   });
 
@@ -87,7 +104,8 @@ function BuildingFormDialog({ open, onClose, building }: { open: boolean; onClos
             rules={{ required: 'Requerido' }}
             render={({ field }) => (
               <TextField {...field} label="ID del edificio" fullWidth disabled={isEdit}
-                error={!!errors.buildingId} helperText={errors.buildingId?.message}
+                error={!!errors.buildingId}
+                helperText={errors.buildingId?.message ?? 'También es el ID de su punto en Mapa → Caminos'}
                 placeholder="BIBLIOTECA, BLOQUE_A..." />
             )}
           />
@@ -103,8 +121,10 @@ function BuildingFormDialog({ open, onClose, building }: { open: boolean; onClos
             <Controller
               name="category"
               control={control}
+              rules={{ required: 'Requerido' }}
               render={({ field }) => (
-                <TextField {...field} label="Categoría" fullWidth placeholder="CO, EDC, Otros..." />
+                <TextField {...field} label="Categoría" fullWidth placeholder="CO, EDC, Otros..."
+                  error={!!errors.category} helperText={errors.category?.message ?? 'La misma de sus salones'} />
               )}
             />
             <Controller
@@ -116,14 +136,19 @@ function BuildingFormDialog({ open, onClose, building }: { open: boolean; onClos
             />
           </Box>
           <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Coordenadas GPS
+            Ubicación (GPS)
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: -1.5 }}>
+            Es el punto del edificio en Mapa → Caminos: si lo arrastras allí, estas coordenadas se actualizan solas.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <Controller name="lat" control={control} render={({ field }) => (
-              <TextField {...field} label="Latitud" type="number" fullWidth inputProps={{ step: 0.000001 }} />
+            <Controller name="lat" control={control} rules={coordRule(90)} render={({ field }) => (
+              <TextField {...field} label="Latitud" type="number" fullWidth inputProps={{ step: 0.000001 }}
+                error={!!errors.lat} helperText={errors.lat?.message} />
             )} />
-            <Controller name="lng" control={control} render={({ field }) => (
-              <TextField {...field} label="Longitud" type="number" fullWidth inputProps={{ step: 0.000001 }} />
+            <Controller name="lng" control={control} rules={coordRule(180)} render={({ field }) => (
+              <TextField {...field} label="Longitud" type="number" fullWidth inputProps={{ step: 0.000001 }}
+                error={!!errors.lng} helperText={errors.lng?.message} />
             )} />
           </Box>
           {mutError && (
@@ -275,6 +300,7 @@ function BuildingsTab() {
   const [deleteConfirm, setDeleteConfirm] = useState<Building | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: buildings, isLoading } = useQuery({
     queryKey: ['buildings'],
@@ -282,15 +308,28 @@ function BuildingsTab() {
     retry: false,
   });
 
+  const { data: nodes = [] } = useQuery({
+    queryKey: ['nodes'],
+    queryFn: () => graphService.getNodes(),
+    retry: false,
+  });
+  const mapPointOf = (b: Building) => {
+    const id = b.nodeId || b.buildingId;
+    return nodes.find(n => n.nodeId === id && n.nodeType === 'BUILDING' && n.active !== false);
+  };
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => buildingService.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['buildings'] }); setDeleteConfirm(null); setDeleteError(null); },
+    onSuccess: () => { invalidateBuildings(qc); setDeleteConfirm(null); setDeleteError(null); },
     onError: (err) => setDeleteError(resolveApiError(err)),
   });
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Cada edificio es un punto «Edificio» en Mapa → Caminos: si creas uno allí aparece aquí, y al revés.
+        </Typography>
         <Button
           variant="contained"
           startIcon={<AddRoundedIcon />}
@@ -309,6 +348,7 @@ function BuildingsTab() {
               <TableCell>Categoría</TableCell>
               <TableCell>Color</TableCell>
               <TableCell>GPS</TableCell>
+              <TableCell>En el mapa</TableCell>
               <TableCell>Estado</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
@@ -317,7 +357,7 @@ function BuildingsTab() {
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><Skeleton variant="text" width="80%" /></TableCell>
                     ))}
                   </TableRow>
@@ -339,6 +379,24 @@ function BuildingsTab() {
                     </TableCell>
                     <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
                       {b.gps ? `${b.gps.lat.toFixed(5)}, ${b.gps.lng.toFixed(5)}` : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const point = mapPointOf(b);
+                        return point ? (
+                          <Tooltip title="Abrir su punto en Mapa → Caminos">
+                            <Chip
+                              label={point.nodeId} size="small" clickable
+                              onClick={() => navigate(`/map?node=${encodeURIComponent(point.nodeId)}`)}
+                              sx={{ bgcolor: '#D1FAE5', color: '#065F46', fontFamily: 'monospace' }}
+                            />
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title="No tiene punto en el mapa: la app no puede trazar la ruta hasta aquí">
+                            <Chip label="Sin ubicar" size="small" sx={{ bgcolor: '#FEF3C7', color: '#92400E' }} />
+                          </Tooltip>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -380,7 +438,7 @@ function BuildingsTab() {
             <strong>{deleteConfirm?.label}</strong> ({deleteConfirm?.buildingId})?
           </Typography>
           <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 1 }}>
-            Esta acción no se puede deshacer.
+            Esta acción no se puede deshacer. Su punto también sale del mapa y la app deja de trazar rutas hasta él.
           </Typography>
           {deleteError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>{deleteError}</Alert>}
         </DialogContent>
