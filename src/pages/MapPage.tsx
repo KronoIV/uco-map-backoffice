@@ -30,6 +30,7 @@ import PageHeader from '../components/PageHeader';
 import SectionTabs, { type SectionTab } from '../components/SectionTabs';
 import PoiEditorPage from './PoiEditorPage';
 import CampusMap3D, { type EdgeLook, type NodeLook } from '../components/map3d/CampusMap3D';
+import { DOOR_EXTRA_PX, doorIconHtml } from '../components/map3d/doorIcon';
 import {
   buildRoutingGraph, routeToBuilding, routeToNode, routeLabel, nodeTypeOf, haversineDistance, formatDistance, walkingMinutes,
 } from '../utils/campus-routing';
@@ -45,13 +46,15 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function makeIcon(color: string, borderColor: string, size: number, ring = false) {
-  const s = size;
+function makeIcon(color: string, borderColor: string, size: number, ring = false, door = false) {
+  const s = door ? size + DOOR_EXTRA_PX : size;
   const ringStyle = ring
     ? `box-shadow:0 0 0 3px ${color}55, 0 0 0 5px ${color}22;`
     : '';
   return L.divIcon({
-    html: `<div style="background:${color};border:2px solid ${borderColor};border-radius:50%;width:${s}px;height:${s}px;${ringStyle}transition:transform 0.1s;"></div>`,
+    html: door
+      ? doorIconHtml(color, borderColor, s, ring)
+      : `<div style="background:${color};border:2px solid ${borderColor};border-radius:50%;width:${s}px;height:${s}px;${ringStyle}transition:transform 0.1s;"></div>`,
     iconSize: [s, s],
     iconAnchor: [s / 2, s / 2],
     className: '',
@@ -67,10 +70,20 @@ const NODE_TYPE_META: Record<NodeType, { label: string; help: string; color: str
 const NODE_TYPES = Object.keys(NODE_TYPE_META) as NodeType[];
 
 const icons = Object.fromEntries(
-  NODE_TYPES.map(t => [t, makeIcon(NODE_TYPE_META[t].color, NODE_TYPE_META[t].border, NODE_TYPE_META[t].size)]),
+  NODE_TYPES.map(t => [t, makeIcon(NODE_TYPE_META[t].color, NODE_TYPE_META[t].border, NODE_TYPE_META[t].size, false, t === 'DOOR')]),
 ) as Record<NodeType, L.DivIcon>;
 
 const selectedIcon = makeIcon('#F59E0B', '#D97706', 18, true);
+const selectedDoorIcon = makeIcon('#F59E0B', '#D97706', 18, true, true);
+
+/** Muestra de color de un tipo de punto: las entradas de edificio llevan el dibujo de la puerta, como en el mapa. */
+function TypeSwatch({ type, size }: { type: NodeType; size: number }) {
+  const m = NODE_TYPE_META[type] ?? NODE_TYPE_META.WAYPOINT;
+  if (type === 'DOOR') {
+    return <Box sx={{ flexShrink: 0, display: 'flex' }} dangerouslySetInnerHTML={{ __html: doorIconHtml(m.color, m.border, size + 4) }} />;
+  }
+  return <Box sx={{ width: size, height: size, borderRadius: '50%', bgcolor: m.color, border: `2px solid ${m.border}`, flexShrink: 0 }} />;
+}
 
 // Mismos colores en el mapa 3D que en el 2D
 const typeLook = (t: NodeType): NodeLook => {
@@ -196,7 +209,7 @@ function TypePicker({ value, onChange }: { value: NodeType; onChange: (t: NodeTy
               '&:hover': { borderColor: m.color },
             }}
           >
-            <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: m.color, border: `2px solid ${m.border}`, flexShrink: 0 }} />
+            <TypeSwatch type={t} size={14} />
             <Box sx={{ minWidth: 0 }}>
               <Typography sx={{ fontSize: '0.8rem', fontWeight: active ? 700 : 600, lineHeight: 1.3 }}>{m.label}</Typography>
               <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', lineHeight: 1.3 }}>{m.help}</Typography>
@@ -475,7 +488,7 @@ function MapInteraction({
           <Marker
             key={node.nodeId}
             position={[node.gps.lat, node.gps.lng]}
-            icon={highlighted ? selectedIcon : icons[node.nodeType] ?? icons.WAYPOINT}
+            icon={highlighted ? (node.nodeType === 'DOOR' ? selectedDoorIcon : selectedIcon) : icons[node.nodeType] ?? icons.WAYPOINT}
             draggable={!drawing}
             eventHandlers={{
               click: () => onNodeClick(node.nodeId),
@@ -696,7 +709,7 @@ function UserNavPreview({
             if (!node.gps) return null;
             const look = previewNodeLook(node);
             return (
-              <Marker key={node.nodeId} position={[node.gps.lat, node.gps.lng]} icon={makeIcon(look.color, look.border, look.size, look.ring)}>
+              <Marker key={node.nodeId} position={[node.gps.lat, node.gps.lng]} icon={makeIcon(look.color, look.border, look.size, look.ring, node.nodeType === 'DOOR')}>
                 <Popup>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{node.nodeId}</Typography>
                   {node.label && <Typography sx={{ fontSize: '0.75rem' }}>{node.label}</Typography>}
@@ -1665,7 +1678,7 @@ export default function MapPage() {
         >
           <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1', display: 'flex', alignItems: 'center', gap: 1 }}>
             {selectedNode && (
-              <Box sx={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0, bgcolor: NODE_TYPE_META[selectedNode.nodeType]?.color, border: `2px solid ${NODE_TYPE_META[selectedNode.nodeType]?.border}` }} />
+              <TypeSwatch type={selectedNode.nodeType} size={14} />
             )}
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', flex: 1, minWidth: 0 }} noWrap>
               {selectedNode ? nodeName(selectedNode) : selectedEdge ? 'Camino' : 'Editar caminos'}
@@ -1785,7 +1798,7 @@ export default function MapPage() {
                   <SectionLabel>Colores</SectionLabel>
                   {NODE_TYPES.map(t => (
                     <Box key={t} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 0.75 }}>
-                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: NODE_TYPE_META[t].color, border: `2px solid ${NODE_TYPE_META[t].border}`, flexShrink: 0 }} />
+                      <TypeSwatch type={t} size={12} />
                       <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{NODE_TYPE_META[t].label}</Typography>
                     </Box>
                   ))}
