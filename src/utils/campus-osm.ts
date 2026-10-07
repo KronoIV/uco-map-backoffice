@@ -23,6 +23,8 @@ export interface CampusOsm {
     paths: OsmCollection; buildings: OsmCollection; footprints: Footprint[];
     /** Límite del campus (amenity=university), anillo cerrado en [lng, lat]; null si OSM no lo trae. */
     campus: Position[] | null;
+    /** Caja consultada (osmBBox): dentro de ella mandan los datos en vivo sobre los tiles. */
+    bbox: string;
 }
 
 interface OsmWay {
@@ -121,7 +123,7 @@ async function fetchLiveOsm(bbox: string): Promise<OsmWay[]> {
     }
 }
 
-function toCampusOsm(elements: OsmWay[]): CampusOsm {
+function toCampusOsm(elements: OsmWay[], bbox: string): CampusOsm {
     const paths: OsmFeature[] = [];
     const buildings: OsmFeature[] = [];
     const footprints: Footprint[] = [];
@@ -165,7 +167,24 @@ function toCampusOsm(elements: OsmWay[]): CampusOsm {
         buildings: { type: 'FeatureCollection', features: buildings },
         footprints,
         campus,
+        bbox,
     };
+}
+
+interface StyledMap {
+    getStyle(): { layers?: Array<{ id: string; type: string; 'source-layer'?: string; filter?: unknown }> };
+    setFilter(id: string, filter: unknown): void;
+}
+
+/** Dentro de la caja de OSM en vivo los caminos de los tiles (de días atrás) se ocultan: quedan solo los actuales. */
+export function hideTileRoadsInside(map: StyledMap, bbox: string): void {
+    const [s, w, n, e] = bbox.split(',').map(Number);
+    const outside = ['!', ['within', { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] }]];
+    for (const layer of map.getStyle().layers ?? []) {
+        if (layer.type !== 'line' || layer['source-layer'] !== 'transportation') continue;
+        if (JSON.stringify(layer.filter ?? null).includes('"within"')) continue;
+        map.setFilter(layer.id, layer.filter ? ['all', layer.filter, outside] : outside);
+    }
 }
 
 const _inflight = new Map<string, Promise<OsmWay[]>>();
@@ -178,7 +197,7 @@ export function loadCampusOsm(bounds: Bounds, onData: (osm: CampusOsm) => void):
 /** Igual que loadCampusOsm, con la caja ya calculada por osmBBox(). */
 export function loadCampusOsmBBox(bbox: string, onData: (osm: CampusOsm) => void): void {
     const cached = readCache(bbox);
-    if (cached) onData(toCampusOsm(cached.elements));
+    if (cached) onData(toCampusOsm(cached.elements, bbox));
     if (cached && Date.now() - cached.at < REFRESH_MS) return;
 
     let pending = _inflight.get(bbox);
@@ -192,7 +211,7 @@ export function loadCampusOsmBBox(bbox: string, onData: (osm: CampusOsm) => void
         _inflight.set(bbox, pending);
     }
     pending.then(
-        elements => onData(toCampusOsm(elements)),
+        elements => onData(toCampusOsm(elements, bbox)),
         err => console.warn('[OSM] Sin datos en vivo; se usan los tiles:', err),
     );
 }

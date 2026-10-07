@@ -4,7 +4,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GraphEdge, GraphNode } from '../../types';
-import { FOOT_WAYS, type CampusOsm } from '../../utils/campus-osm';
+import { FOOT_WAYS, hideTileRoadsInside, type CampusOsm } from '../../utils/campus-osm';
 import { nodeBadgeHtml } from './doorIcon';
 
 // Misma vista que el mapa exterior de la app (uco-map-app/src/navigation/outdoor-map.ts)
@@ -138,7 +138,7 @@ function addLiveOsm(map: MlMap, osm: CampusOsm | null | undefined, satellite: bo
       const foot: ExpressionSpecification = ['match', ['get', 'highway'], FOOT_WAYS, true, false];
       const round = { 'line-cap': 'round', 'line-join': 'round' } as const;
       map.addLayer({
-        id: 'ucm-osm-paths-casing', type: 'line', source: 'ucm-osm-paths', minzoom: 14, layout: round,
+        id: 'ucm-osm-paths-casing', type: 'line', source: 'ucm-osm-paths', layout: round,
         paint: {
           'line-color': '#cfc6b8',
           'line-width': ['interpolate', ['exponential', 1.5], ['zoom'],
@@ -146,7 +146,7 @@ function addLiveOsm(map: MlMap, osm: CampusOsm | null | undefined, satellite: bo
         },
       });
       map.addLayer({
-        id: 'ucm-osm-paths', type: 'line', source: 'ucm-osm-paths', minzoom: 14, layout: round,
+        id: 'ucm-osm-paths', type: 'line', source: 'ucm-osm-paths', layout: round,
         paint: {
           'line-color': ['case', foot, '#fbf8f3', '#ffffff'],
           'line-width': ['interpolate', ['exponential', 1.5], ['zoom'],
@@ -169,6 +169,7 @@ function addLiveOsm(map: MlMap, osm: CampusOsm | null | undefined, satellite: bo
       if (layer.type === 'fill-extrusion' && layer.id !== OSM_BUILDINGS) map.setLayoutProperty(layer.id, 'visibility', 'none');
     }
   }
+  if (!satellite && osm.paths.features.length > 0) hideTileRoadsInside(map, osm.bbox);
   stackLayers(map, edgesOnTop);
 }
 
