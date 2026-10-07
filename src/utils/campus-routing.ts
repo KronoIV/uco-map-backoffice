@@ -13,13 +13,20 @@ export interface RoutingNode {
 
 interface Adjacency { node: string; dist: number; }
 
+type Xy = [number, number];
+
+/** Polígono del campus en metros alrededor de su primer vértice, con el perímetro acumulado por vértice. */
+interface CampusArea { origin: LatLng; kx: number; ring: Xy[]; cum: number[]; perimeter: number; }
+
 export interface RoutingGraph {
     nodes: Map<string, RoutingNode>;
     /** Aristas válidas, sin repetir ni bucles. */
     edges: Array<[string, string]>;
     adj: Map<string, Adjacency[]>;
-    /** Caja de los nodos con margen: fuera de ella el usuario debe entrar por una ENTRANCE. */
+    /** Caja de los nodos con margen (encuadre y descarga de OSM; límite del campus solo si no hay polígono). */
     bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } | null;
+    /** Límite real del campus: fuera de él el usuario debe entrar por una ENTRANCE. */
+    campus: CampusArea | null;
 }
 
 export interface PlannedRoute {
@@ -49,6 +56,17 @@ export const FREE_WALK_PENALTY = 1.6;
 export const CAMPUS_PADDING_METERS = 10;
 // Ritmo peatonal en campus con pendientes y escaleras
 export const WALKING_SPEED_MPS = 1.2;
+
+/** Límite del campus en OpenStreetMap (way 577325228, «Universidad Catolica de Oriente»), en [lng, lat]. */
+export const UCO_CAMPUS_BOUNDARY: Array<[number, number]> = [
+    [-75.3686583, 6.1511608], [-75.3677017, 6.1516786], [-75.3671222, 6.1519672], [-75.3671164, 6.1518244],
+    [-75.3659738, 6.1516591], [-75.3653622, 6.1515524], [-75.3647239, 6.1512271], [-75.3649438, 6.1501444],
+    [-75.3651852, 6.1499844], [-75.3652988, 6.1498654], [-75.3653575, 6.1497207], [-75.3654575, 6.1495486],
+    [-75.3655348, 6.1494017], [-75.3656169, 6.1494332], [-75.3656543, 6.1493452], [-75.3658021, 6.1491523],
+    [-75.3661898, 6.1489], [-75.3663316, 6.1488077], [-75.3665797, 6.1490819], [-75.3668482, 6.1492643],
+    [-75.3669715, 6.1492987], [-75.3670489, 6.149349], [-75.367272, 6.149435], [-75.3675085, 6.1496299],
+    [-75.3676386, 6.149754], [-75.3680612, 6.1503457], [-75.3686583, 6.1511608],
+];
 
 export function walkingMinutes(meters: number): number {
     return Math.ceil(meters / WALKING_SPEED_MPS / 60);
@@ -86,7 +104,11 @@ export function projectToSegment(
     return { lat: a.lat + qy / ky, lng: a.lng + qx / kx, dist: Math.hypot(px - qx, py - qy), t };
 }
 
-export function buildRoutingGraph(nodeList: RoutingNode[], edgeList: Array<[string, string]>): RoutingGraph {
+export function buildRoutingGraph(
+    nodeList: RoutingNode[],
+    edgeList: Array<[string, string]>,
+    boundary: Array<[number, number]> | null = UCO_CAMPUS_BOUNDARY,
+): RoutingGraph {
     const nodes = new Map<string, RoutingNode>();
     for (const n of nodeList) nodes.set(n.id, { ...n, nodeType: (n.nodeType || 'WAYPOINT').toUpperCase() });
 
@@ -118,14 +140,81 @@ export function buildRoutingGraph(nodeList: RoutingNode[], edgeList: Array<[stri
         const pLng = pLat / Math.cos(minLat * Math.PI / 180);
         bounds = { minLat: minLat - pLat, maxLat: maxLat + pLat, minLng: minLng - pLng, maxLng: maxLng + pLng };
     }
-    return { nodes, edges, adj, bounds };
+    return { nodes, edges, adj, bounds, campus: campusArea(boundary) };
 }
 
 export function nodeTypeOf(graph: RoutingGraph, id: string): string {
     return graph.nodes.get(id)?.nodeType || 'WAYPOINT';
 }
 
+function campusArea(boundary: Array<[number, number]> | null): CampusArea | null {
+    if (!boundary || boundary.length < 3) return null;
+    const origin = { lat: boundary[0][1], lng: boundary[0][0] };
+    const kx     = 111320 * Math.cos(origin.lat * Math.PI / 180);
+    const ring: Xy[] = boundary.map(([lng, lat]) => [(lng - origin.lng) * kx, (lat - origin.lat) * 111320]);
+    const first = ring[0], last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+    const cum = [0];
+    for (let i = 1; i < ring.length; i++) cum.push(cum[i - 1] + Math.hypot(ring[i][0] - ring[i - 1][0], ring[i][1] - ring[i - 1][1]));
+    return { origin, kx, ring, cum, perimeter: cum[cum.length - 1] };
+}
+
+function toXy(area: CampusArea, lat: number, lng: number): Xy {
+    return [(lng - area.origin.lng) * area.kx, (lat - area.origin.lat) * 111320];
+}
+
+function insideArea(area: CampusArea, [x, y]: Xy): boolean {
+    const r = area.ring;
+    let inside = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [xi, yi] = r[i], [xj, yj] = r[j];
+        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+}
+
+/** Punto del perímetro más cercano: dónde queda a lo largo del perímetro (s), a qué distancia (d) y cuál es (q). */
+function nearestOnPerimeter(area: CampusArea, [x, y]: Xy): { s: number; d: number; q: Xy } {
+    let best = { s: 0, d: Infinity, q: area.ring[0] };
+    for (let i = 0; i < area.ring.length - 1; i++) {
+        const [ax, ay] = area.ring[i], [bx, by] = area.ring[i + 1];
+        const vx = bx - ax, vy = by - ay;
+        const l2 = vx * vx + vy * vy;
+        const t  = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2)) : 0;
+        const q: Xy = [ax + vx * t, ay + vy * t];
+        const d = Math.hypot(x - q[0], y - q[1]);
+        if (d < best.d) best = { s: area.cum[i] + Math.sqrt(l2) * t, d, q };
+    }
+    return best;
+}
+
+/** La recta a→b pasa por dentro del campus (muestreo cada ~5 m, sin los extremos). */
+function crossesArea(area: CampusArea, a: Xy, b: Xy): boolean {
+    const steps = Math.min(400, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 5));
+    for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        if (insideArea(area, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])) return true;
+    }
+    return false;
+}
+
+/**
+ * Metros a pie desde afuera hasta una entrada: hasta el punto del límite más cercano a ella (rodeando el campus
+ * por su perímetro si la recta lo atraviesa) y de ahí a la entrada. Sin polígono, en línea recta.
+ */
+export function metersFromOutside(graph: RoutingGraph, lat: number, lng: number, entrance: LatLng): number {
+    const area = graph.campus;
+    if (!area) return haversineDistance(lat, lng, entrance.lat, entrance.lng);
+    const from = toXy(area, lat, lng);
+    const gate = nearestOnPerimeter(area, toXy(area, entrance.lat, entrance.lng));
+    if (!crossesArea(area, from, gate.q)) return Math.hypot(from[0] - gate.q[0], from[1] - gate.q[1]) + gate.d;
+    const user = nearestOnPerimeter(area, from);
+    const arc  = Math.abs(user.s - gate.s);
+    return user.d + Math.min(arc, area.perimeter - arc) + gate.d;
+}
+
 export function isInsideCampus(graph: RoutingGraph, lat: number, lng: number): boolean {
+    if (graph.campus) return insideArea(graph.campus, toXy(graph.campus, lat, lng));
     const b = graph.bounds;
     return !!b && lat >= b.minLat && lat <= b.maxLat && lng >= b.minLng && lng <= b.maxLng;
 }
@@ -210,24 +299,25 @@ function dijkstra(graph: RoutingGraph, toId: string, startLinks: Adjacency[]): {
     return path[0] === USER_NODE_ID ? { path, cost: dist.get(toId)! } : { path: [], cost: Infinity };
 }
 
-interface StartLink { node: string; cost: number; via: LatLng | null; }
+interface StartLink { node: string; cost: number; via: LatLng | null; meters?: number; }
 
 /**
  * Conexiones del usuario hacia el grafo:
- * - Fuera del campus: hacia cada entrada (debe ingresar por una de ellas).
+ * - Fuera del campus: hacia cada entrada, por fuera del límite (debe ingresar por una de ellas).
  * - Dentro: proyección sobre cada sendero cercano + nodos cercanos en línea recta.
  */
 function buildStartLinks(graph: RoutingGraph, lat: number, lng: number): Map<string, StartLink> {
     const links = new Map<string, StartLink>();
-    const add = (node: string, cost: number, via: LatLng | null) => {
+    const add = (node: string, cost: number, via: LatLng | null, meters?: number) => {
         const cur = links.get(node);
-        if (!cur || cost < cur.cost) links.set(node, { node, cost, via });
+        if (!cur || cost < cur.cost) links.set(node, { node, cost, via, meters });
     };
 
     if (!isInsideCampus(graph, lat, lng)) {
         for (const n of graph.nodes.values()) {
             if (n.nodeType !== 'ENTRANCE') continue;
-            add(n.id, haversineDistance(lat, lng, n.gps.lat, n.gps.lng), null);
+            const meters = metersFromOutside(graph, lat, lng, n.gps);
+            add(n.id, meters, null, meters);
         }
         if (links.size > 0) return links;
     }
@@ -278,9 +368,9 @@ export function routeToNode(graph: RoutingGraph, lat: number, lng: number, desti
     const nodeIds = result.path.slice(1);
     const first   = links.get(nodeIds[0])!;
     const n0      = graph.nodes.get(nodeIds[0])!.gps;
-    let totalDist = first.via
+    let totalDist = first.meters ?? (first.via
         ? haversineDistance(lat, lng, first.via.lat, first.via.lng) + haversineDistance(first.via.lat, first.via.lng, n0.lat, n0.lng)
-        : haversineDistance(lat, lng, n0.lat, n0.lng);
+        : haversineDistance(lat, lng, n0.lat, n0.lng));
     for (let i = 0; i < nodeIds.length - 1; i++) {
         const a = graph.nodes.get(nodeIds[i])!.gps;
         const b = graph.nodes.get(nodeIds[i + 1])!.gps;

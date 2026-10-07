@@ -19,7 +19,11 @@ export interface OsmCollection { type: 'FeatureCollection'; features: OsmFeature
 /** Planta de un edificio: anillo cerrado en [lng, lat]. */
 export interface Footprint { id: number; name: string; ring: Position[]; }
 
-export interface CampusOsm { paths: OsmCollection; buildings: OsmCollection; footprints: Footprint[]; }
+export interface CampusOsm {
+    paths: OsmCollection; buildings: OsmCollection; footprints: Footprint[];
+    /** Límite del campus (amenity=university), anillo cerrado en [lng, lat]; null si OSM no lo trae. */
+    campus: Position[] | null;
+}
 
 interface OsmWay {
     type: string;
@@ -35,7 +39,7 @@ const OVERPASS_URLS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
 ];
-const CACHE_KEY  = 'ucomap.osmLive.v1';
+const CACHE_KEY  = 'ucomap.osmLive.v2';
 const REFRESH_MS = 5 * 60 * 1000;
 const MARGIN_M   = 150;
 // La caja se redondea a esta malla para que mover un nodo no cambie la consulta
@@ -86,7 +90,7 @@ async function fetchOsmApi(bbox: string): Promise<OsmWay[]> {
     }
     const ways: OsmWay[] = [];
     for (const el of json.elements ?? []) {
-        if (el.type !== 'way' || !el.tags || !el.nodes || !(el.tags.highway || el.tags.building)) continue;
+        if (el.type !== 'way' || !el.tags || !el.nodes || !(el.tags.highway || el.tags.building || el.tags.amenity === 'university')) continue;
         const geometry = el.nodes.map(id => nodes.get(id)).filter((p): p is { lat: number; lon: number } => !!p);
         ways.push({ type: 'way', id: el.id, tags: el.tags, geometry });
     }
@@ -94,7 +98,7 @@ async function fetchOsmApi(bbox: string): Promise<OsmWay[]> {
 }
 
 async function fetchOverpass(bbox: string): Promise<OsmWay[]> {
-    const query = `[out:json][timeout:25];(way["highway"](${bbox});way["building"](${bbox}););out geom;`;
+    const query = `[out:json][timeout:25];(way["highway"](${bbox});way["building"](${bbox});way["amenity"="university"](${bbox}););out geom;`;
     let lastErr: unknown = null;
     for (const url of OVERPASS_URLS) {
         try {
@@ -121,11 +125,20 @@ function toCampusOsm(elements: OsmWay[]): CampusOsm {
     const paths: OsmFeature[] = [];
     const buildings: OsmFeature[] = [];
     const footprints: Footprint[] = [];
+    let campus: Position[] | null = null;
+    let campusArea = 0;
     const num = (v: string | undefined) => { const n = parseFloat(v ?? ''); return Number.isFinite(n) ? n : 0; };
     for (const el of elements) {
         if (el.type !== 'way' || !el.tags || !el.geometry || el.geometry.length < 2) continue;
         const coords = el.geometry.map(p => [p.lon, p.lat] as Position);
-        if (el.tags.building) {
+        if (el.tags.amenity === 'university' && !el.tags.building) {
+            const first = coords[0], last = coords[coords.length - 1];
+            if (coords.length < 4 || first[0] !== last[0] || first[1] !== last[1]) continue;
+            // Con varias universidades en la caja, la más grande es el campus
+            let area = 0;
+            for (let i = 0; i < coords.length - 1; i++) area += coords[i][0] * coords[i + 1][1] - coords[i + 1][0] * coords[i][1];
+            if (Math.abs(area) > campusArea) { campusArea = Math.abs(area); campus = coords; }
+        } else if (el.tags.building) {
             if (coords.length < 4) continue;
             const first = coords[0], last = coords[coords.length - 1];
             if (first[0] !== last[0] || first[1] !== last[1]) coords.push(first);
@@ -151,6 +164,7 @@ function toCampusOsm(elements: OsmWay[]): CampusOsm {
         paths:     { type: 'FeatureCollection', features: paths },
         buildings: { type: 'FeatureCollection', features: buildings },
         footprints,
+        campus,
     };
 }
 
