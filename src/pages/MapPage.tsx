@@ -67,7 +67,7 @@ const NODE_TYPE_META: Record<NodeType, { label: string; help: string; color: str
   DOOR: { label: 'Entrada de edificio', help: 'Por donde se entra; va sobre la fachada', color: '#8B5CF6', border: '#5B21B6', size: 14 },
   BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: '#00d084', border: '#004628', size: 18 },
   ENTRANCE: { label: 'Entrada al campus', help: 'Portería o acceso desde la calle', color: '#3B82F6', border: '#1E40AF', size: 14 },
-  POI: { label: 'Punto de interés', help: 'Cafetería u otro lugar que la app lista aparte', color: '#B45309', border: '#78350F', size: 14 },
+  POI: { label: 'Punto de interés', help: 'Auditorio u otro lugar que la app lista aparte', color: '#B45309', border: '#78350F', size: 14 },
 };
 const NODE_TYPES = Object.keys(NODE_TYPE_META) as NodeType[];
 
@@ -1922,7 +1922,7 @@ export default function MapPage() {
                   <li><b>Toca un punto o un camino</b> para ver sus opciones.</li>
                   <li><b>Arrastra un punto</b> para moverlo.</li>
                   <li><b>Dibujar camino</b> para agregar senderos nuevos.</li>
-                  <li><b>Punto de interés</b> para agregar cafeterías y otros lugares que la app lista aparte.</li>
+                  <li><b>Punto de interés</b> para agregar auditorios y otros lugares que la app lista aparte.</li>
                 </Box>
 
                 <Box>

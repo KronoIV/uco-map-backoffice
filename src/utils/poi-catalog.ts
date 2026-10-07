@@ -3,7 +3,7 @@
 // (`npm run check:routing` en el admin lo verifica). Para agregar una clase basta una entrada en POI_TYPES.
 
 export interface PoiType {
-    /** Clave guardada en el nodo: mayúsculas, números y _ (p. ej. "CAFETERIA"). */
+    /** Clave guardada en el nodo: mayúsculas, números y _ (p. ej. "AUDITORIO"). */
     key:    string;
     label:  string;
     plural: string;
@@ -15,7 +15,6 @@ export interface PoiType {
 }
 
 export const POI_TYPES: readonly PoiType[] = [
-    { key: 'CAFETERIA', label: 'Cafetería', plural: 'Cafeterías', emoji: '☕', icon: 'fa-mug-hot', color: '#B45309' },
     { key: 'AUDITORIO', label: 'Auditorio', plural: 'Auditorios', emoji: '🎭', icon: 'fa-masks-theater', color: '#7C3AED' },
     // { key: 'BANOS',  label: 'Baños', plural: 'Baños', emoji: '🚻', icon: 'fa-restroom', color: '#0284C7' },
 ];
