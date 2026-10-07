@@ -37,6 +37,8 @@ export interface GraphNode {
   poiType?: string | null;
   /** Solo POI: edificio (buildingId) que lo contiene; vacío = al aire libre. */
   buildingId?: string | null;
+  /** Solo DOOR y POI dentro de un edificio: piso (negativo = sótano). */
+  floor?: number | null;
   active: boolean;
 }
 
@@ -75,6 +77,8 @@ export interface Room {
   stateId: string;
   modelUrl?: string;
   arPosition?: ArPoint | null;
+  /** Piso (negativo = sótano). */
+  floor?: number | null;
   active: boolean;
 }
 

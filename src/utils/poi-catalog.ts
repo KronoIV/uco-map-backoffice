@@ -16,6 +16,7 @@ export interface PoiType {
 
 export const POI_TYPES: readonly PoiType[] = [
     { key: 'CAFETERIA', label: 'Cafetería', plural: 'Cafeterías', emoji: '☕', icon: 'fa-mug-hot', color: '#B45309' },
+    { key: 'AUDITORIO', label: 'Auditorio', plural: 'Auditorios', emoji: '🎭', icon: 'fa-masks-theater', color: '#7C3AED' },
     // { key: 'BANOS',  label: 'Baños', plural: 'Baños', emoji: '🚻', icon: 'fa-restroom', color: '#0284C7' },
 ];
 

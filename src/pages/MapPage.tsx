@@ -141,6 +141,44 @@ function PoiFields({
 }
 const SELECTED_LOOK: NodeLook = { color: '#F59E0B', border: '#D97706', size: 18, ring: true };
 
+const MIN_FLOOR = -5;
+const MAX_FLOOR = 60;
+
+/** Texto del campo → piso; undefined si no es un piso válido. */
+function parseFloor(text: string): number | null | undefined {
+  const t = text.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isInteger(n) && n >= MIN_FLOOR && n <= MAX_FLOOR ? n : undefined;
+}
+
+function FloorField({ node, disabled, onChange }: { node: GraphNode; disabled: boolean; onChange: (floor: number | null) => void }) {
+  const [error, setError] = useState(false);
+  const door = node.nodeType === 'DOOR';
+  const save = (text: string) => {
+    const floor = parseFloor(text);
+    setError(floor === undefined);
+    if (floor !== undefined && floor !== (node.floor ?? null)) onChange(floor);
+  };
+  return (
+    <TextField
+      key={`${node.nodeId}-${node.floor ?? ''}`}
+      size="small"
+      type="number"
+      label={door ? 'Piso de esta salida' : 'Piso'}
+      defaultValue={node.floor ?? ''}
+      disabled={disabled}
+      error={error}
+      helperText={error
+        ? `Un número entero entre ${MIN_FLOOR} y ${MAX_FLOOR}`
+        : door ? 'Por qué piso se sale a la calle. Negativo = sótano.' : 'Dónde buscarlo dentro del edificio. Negativo = sótano.'}
+      slotProps={{ htmlInput: { min: MIN_FLOOR, max: MAX_FLOOR, step: 1 } }}
+      onBlur={e => save(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+    />
+  );
+}
+
 /** Igual que la app: «N min» a 1.2 m/s. */
 const formatEta = (meters: number) => {
   const min = walkingMinutes(meters);
@@ -291,7 +329,7 @@ const alertSx = { py: 0, fontSize: '0.75rem', borderRadius: '10px' };
 const pillSx = { textTransform: 'none', borderRadius: '100px', fontWeight: 600 } as const;
 
 function NodeDetails({
-  node, nodes, edges, buildings, busy, onRename, onChangeType, onPoiChange, onDrawFrom, onDelete, onSelect,
+  node, nodes, edges, buildings, busy, onRename, onChangeType, onPoiChange, onFloorChange, onDrawFrom, onDelete, onSelect,
 }: {
   node: GraphNode;
   nodes: GraphNode[];
@@ -301,6 +339,7 @@ function NodeDetails({
   onRename: (nodeId: string, label: string) => void;
   onChangeType: (nodeId: string, type: NodeType) => void;
   onPoiChange: (nodeId: string, patch: Pick<GraphNode, 'poiType' | 'buildingId'>) => void;
+  onFloorChange: (nodeId: string, floor: number | null) => void;
   onDrawFrom: (nodeId: string) => void;
   onDelete: (nodeId: string) => void;
   onSelect: (nodeId: string) => void;
@@ -332,6 +371,9 @@ function NodeDetails({
       {node.nodeType === 'POI' && (
         <PoiFields node={node} neighbors={near.length} buildings={buildings} disabled={busy}
           onChange={patch => onPoiChange(node.nodeId, patch)} />
+      )}
+      {(node.nodeType === 'DOOR' || (node.nodeType === 'POI' && node.buildingId)) && (
+        <FloorField node={node} disabled={busy} onChange={floor => onFloorChange(node.nodeId, floor)} />
       )}
       {status && <Alert severity={status.ok ? 'success' : 'warning'} sx={alertSx}>{status.text}</Alert>}
       {node.nodeType === 'BUILDING' && (
@@ -1623,6 +1665,11 @@ export default function MapPage() {
     if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, ...patch } });
   };
 
+  const handleFloorChange = (nodeId: string, floor: number | null) => {
+    const node = findNode(nodeId);
+    if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, floor } });
+  };
+
   const handleRename = (nodeId: string, label: string) => {
     const node = findNode(nodeId);
     if (node) updateNodeMutation.mutate({ id: nodeId, data: { ...node, label: label || undefined } });
@@ -1853,6 +1900,7 @@ export default function MapPage() {
                 onRename={handleRename}
                 onChangeType={handleChangeType}
                 onPoiChange={handlePoiChange}
+                onFloorChange={handleFloorChange}
                 onDrawFrom={id => startDrawing(id)}
                 onDelete={handleDeleteNode}
                 onSelect={id => selectNode(id, true)}

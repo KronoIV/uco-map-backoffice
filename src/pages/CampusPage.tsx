@@ -173,6 +173,7 @@ interface RoomFormData {
   name: string;
   category: string;
   modelUrl: string;
+  floor: string;
 }
 
 function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () => void; room?: Room | null }) {
@@ -191,6 +192,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
     name: room?.name ?? '',
     category: room?.category ?? (buildings[0]?.category ?? ''),
     modelUrl: room?.modelUrl ?? '',
+    floor: room?.floor != null ? String(room.floor) : '',
   };
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<RoomFormData>({
@@ -217,6 +219,7 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
       stateId: room?.stateId,
       modelUrl: formData.modelUrl || undefined,
       arPosition: room?.arPosition ?? null,
+      floor: formData.floor.trim() ? Number(formData.floor) : null,
       active: true,
     };
     if (isEdit) { updateMutation.mutate({ id: room!.roomId, data: payload }); }
@@ -252,6 +255,19 @@ function RoomFormDialog({ open, onClose, room }: { open: boolean; onClose: () =>
                     <MenuItem key={b.buildingId} value={b.category}>{b.label}</MenuItem>
                   ))}
                 </TextField>
+              )}
+            />
+            <Controller
+              name="floor"
+              control={control}
+              rules={{
+                validate: v => !v.trim() || (Number.isInteger(Number(v)) && Number(v) >= -5 && Number(v) <= 60)
+                  || 'Entero entre -5 y 60',
+              }}
+              render={({ field }) => (
+                <TextField {...field} label="Piso" type="number" sx={{ width: 140, flexShrink: 0 }}
+                  error={!!errors.floor} helperText={errors.floor?.message ?? 'Negativo = sótano'}
+                  slotProps={{ htmlInput: { min: -5, max: 60, step: 1 } }} />
               )}
             />
           </Box>
@@ -532,6 +548,7 @@ function RoomsTab() {
               <TableCell>ID</TableCell>
               <TableCell>Nombre</TableCell>
               <TableCell>Edificio</TableCell>
+              <TableCell>Piso</TableCell>
               <TableCell>Estado</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
@@ -540,7 +557,7 @@ function RoomsTab() {
             {isLoading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <TableCell key={j}><Skeleton variant="text" width="80%" /></TableCell>
                     ))}
                   </TableRow>
@@ -555,6 +572,9 @@ function RoomsTab() {
                         size="small"
                         sx={{ bgcolor: '#F3F4F6', color: '#374151' }}
                       />
+                    </TableCell>
+                    <TableCell sx={{ color: room.floor == null ? 'text.disabled' : undefined }}>
+                      {room.floor ?? '—'}
                     </TableCell>
                     <TableCell>
                       <Tooltip title={room.active ? 'Desactivar' : 'Activar'}>
