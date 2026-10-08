@@ -6,6 +6,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { ArPoint, MapMesh } from '../../types';
 import type { NavMeshPreview } from '../../utils/navmesh';
+import { triangulatePatch } from '../../utils/navPatches';
 
 export type MarkerKind = 'room' | 'selected' | 'draft' | 'reference';
 
@@ -24,6 +25,15 @@ export interface ViewerConnection {
   selected: boolean;
 }
 
+export interface ViewerPatch {
+  id: string;
+  label: string;
+  points: ArPoint[];
+  selected: boolean;
+  /** Se puede tocar para editarlo (no mientras se dibuja otro). */
+  selectable: boolean;
+}
+
 export interface MapViewerApi {
   /** Triángulos de las mallas cargadas en el espacio del mapa (entrada para recast). */
   collectGeometry(): { positions: Float32Array; indices: Uint32Array; meshNames: string[] };
@@ -33,8 +43,11 @@ interface MapViewerProps {
   meshes: MapMesh[];
   markers: ViewerMarker[];
   connections: ViewerConnection[];
+  patches: ViewerPatch[];
   navMesh: NavMeshPreview | null;
   clipY: number | null;
+  /** Altura del plano donde cae el clic si no hay modelo debajo (o está lejos de ella). */
+  pickPlaneY: number | null;
   focus: ArPoint | null;
   onPick: (p: ArPoint) => void;
   onMarkerClick: (id: string) => void;
@@ -46,6 +59,8 @@ interface MapViewerProps {
 
 const CACHE_NAME = 'ucomap-multiset-meshes';
 const NO_CLIP = 1e6;
+// Un clic que cae más lejos que esto del plano del parche (pared, piso de abajo) se proyecta al plano
+const PLANE_SNAP_M = 0.5;
 const MARKER_COLORS: Record<MarkerKind, number> = {
   room: 0x00a86b,
   selected: 0x1e88e5,
@@ -93,6 +108,7 @@ class ViewerEngine {
   readonly markerRoot = new THREE.Group();
   readonly connRoot = new THREE.Group();
   readonly navRoot = new THREE.Group();
+  readonly patchRoot = new THREE.Group();
   readonly clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), NO_CLIP);
   readonly loader: GLTFLoader;
   readonly draco: DRACOLoader;
@@ -116,6 +132,14 @@ class ViewerEngine {
     endSelected: new THREE.MeshBasicMaterial({ color: 0x1e88e5, depthTest: false, transparent: true }),
   };
   private readonly connEndGeo = new THREE.SphereGeometry(0.18, 12, 8);
+  private readonly patchMat = {
+    fill: new THREE.MeshBasicMaterial({ color: 0x29b6f6, transparent: true, opacity: 0.45, depthTest: false, side: THREE.DoubleSide }),
+    fillSelected: new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide }),
+    line: new THREE.LineBasicMaterial({ color: 0x0288d1, depthTest: false, transparent: true }),
+    lineSelected: new THREE.LineBasicMaterial({ color: 0xff6f00, depthTest: false, transparent: true }),
+    vertex: new THREE.MeshBasicMaterial({ color: 0xff6f00, depthTest: false, transparent: true }),
+  };
+  private readonly patchVertexGeo = new THREE.SphereGeometry(0.07, 10, 6);
   private readonly navMat = new THREE.MeshBasicMaterial({
     color: 0x00e676, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -137,7 +161,7 @@ class ViewerEngine {
     container.appendChild(this.labels.domElement);
 
     this.scene.background = new THREE.Color(0x1b1f24);
-    this.scene.add(this.meshRoot, this.navRoot, this.connRoot, this.markerRoot);
+    this.scene.add(this.meshRoot, this.navRoot, this.patchRoot, this.connRoot, this.markerRoot);
     this.navMat.clippingPlanes = [this.clipPlane];
     this.raycaster.params.Line = { threshold: 0.2 };
     this.camera.position.set(40, 50, 40);
@@ -299,6 +323,56 @@ class ViewerEngine {
     this.updateMarkerVisibility();
   }
 
+  setPatches(patches: ViewerPatch[]) {
+    this.clearLabels(this.patchRoot);
+    for (const p of patches) {
+      const group = new THREE.Group();
+      group.userData = { minY: Math.min(...p.points.map(q => q.y)), keep: p.selected };
+      const markerId = p.selectable ? `patch:${p.id}` : undefined;
+      const vectors = p.points.map(q => new THREE.Vector3(q.x, q.y, q.z));
+
+      const tris = triangulatePatch(p.points);
+      if (tris.length) {
+        const geo = new THREE.BufferGeometry().setFromPoints(vectors);
+        geo.setIndex(tris);
+        const fill = new THREE.Mesh(geo, p.selected ? this.patchMat.fillSelected : this.patchMat.fill);
+        fill.position.y = 0.04;
+        fill.renderOrder = 7;
+        fill.userData.markerId = markerId;
+        group.add(fill);
+      }
+      if (vectors.length > 1) {
+        const outline = new (vectors.length > 2 ? THREE.LineLoop : THREE.Line)(
+          new THREE.BufferGeometry().setFromPoints(vectors),
+          p.selected ? this.patchMat.lineSelected : this.patchMat.line,
+        );
+        outline.renderOrder = 8;
+        outline.userData.markerId = markerId;
+        group.add(outline);
+      }
+      if (p.selected) {
+        for (const v of vectors) {
+          const dot = new THREE.Mesh(this.patchVertexGeo, this.patchMat.vertex);
+          dot.position.copy(v);
+          dot.renderOrder = 9;
+          group.add(dot);
+        }
+        const el = document.createElement('div');
+        el.textContent = p.label;
+        Object.assign(el.style, {
+          padding: '2px 6px', borderRadius: '6px', fontSize: '11px', fontWeight: '600',
+          color: '#fff', background: '#ff6f00cc', whiteSpace: 'nowrap',
+        });
+        const label = new CSS2DObject(el);
+        const box = new THREE.Box3().setFromPoints(vectors);
+        label.position.set((box.min.x + box.max.x) / 2, box.max.y + 0.6, (box.min.z + box.max.z) / 2);
+        group.add(label);
+      }
+      this.patchRoot.add(group);
+    }
+    this.updateMarkerVisibility();
+  }
+
   collectGeometry() {
     this.meshRoot.updateMatrixWorld(true);
     const meshes: THREE.Mesh[] = [];
@@ -339,6 +413,7 @@ class ViewerEngine {
       child.traverse(o => {
         if (o instanceof CSS2DObject) o.element.remove();
         if (o instanceof THREE.Line) o.geometry.dispose();
+        if (o instanceof THREE.Mesh && o.geometry !== this.patchVertexGeo && root === this.patchRoot) o.geometry.dispose();
       });
       root.remove(child);
     }
@@ -386,6 +461,9 @@ class ViewerEngine {
     for (const g of this.connRoot.children) {
       g.visible = g.userData.keep || g.userData.minY <= limit + 0.5;
     }
+    for (const g of this.patchRoot.children) {
+      g.visible = g.userData.keep || g.userData.minY <= limit + 0.5;
+    }
   }
 
   focusOn(p: ArPoint) {
@@ -411,13 +489,18 @@ class ViewerEngine {
     this.raycaster.setFromCamera(ndc, this.camera);
 
     const markerHit = this.raycaster
-      .intersectObjects([...this.markerRoot.children, ...this.connRoot.children], true)
+      .intersectObjects([...this.markerRoot.children, ...this.connRoot.children, ...this.patchRoot.children], true)
       .find(h => h.object.userData.markerId && h.object.parent?.visible);
     if (markerHit) { this.props.onMarkerClick(markerHit.object.userData.markerId); return; }
 
     const limit = this.clipPlane.constant + 0.01;
     const hit = this.raycaster.intersectObjects(this.meshRoot.children, true).find(h => h.point.y <= limit);
-    if (hit) this.props.onPick({ x: round(hit.point.x), y: round(hit.point.y), z: round(hit.point.z) });
+    const planeY = this.props.pickPlaneY;
+    let point = hit?.point ?? null;
+    if (planeY !== null && (!point || Math.abs(point.y - planeY) > PLANE_SNAP_M)) {
+      point = this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY), new THREE.Vector3());
+    }
+    if (point) this.props.onPick({ x: round(point.x), y: round(point.y), z: round(point.z) });
   };
 
   private disposeObject(obj: THREE.Object3D) {
@@ -444,6 +527,9 @@ class ViewerEngine {
     Object.values(this.markerGeo).forEach(g => g.dispose());
     Object.values(this.connMat).forEach(m => m.dispose());
     this.connEndGeo.dispose();
+    this.clearLabels(this.patchRoot);
+    Object.values(this.patchMat).forEach(m => m.dispose());
+    this.patchVertexGeo.dispose();
     this.setNavMesh(null);
     this.navMat.dispose();
     this.clearLabels(this.connRoot);
@@ -476,6 +562,7 @@ export default function MapViewer(props: MapViewerProps) {
   useEffect(() => { engineRef.current?.setMeshes(props.meshes); }, [props.meshes]);
   useEffect(() => { engineRef.current?.setMarkers(props.markers); }, [props.markers]);
   useEffect(() => { engineRef.current?.setConnections(props.connections); }, [props.connections]);
+  useEffect(() => { engineRef.current?.setPatches(props.patches); }, [props.patches]);
   useEffect(() => { engineRef.current?.setNavMesh(props.navMesh); }, [props.navMesh]);
   useEffect(() => { engineRef.current?.setClipY(props.clipY); }, [props.clipY]);
   useEffect(() => { if (props.focus) engineRef.current?.focusOn(props.focus); }, [props.focus]);

@@ -6,14 +6,16 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
+import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
 import type { ArPoint } from '../../types';
+import { patchArea } from '../../utils/navPatches';
 import type { NavigationEditor } from './useNavigationEditor';
 
 const fmt = (p: ArPoint | null) => (p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}` : '—');
 const dist = (a: ArPoint, b: ArPoint) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
 export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
-  const { draft } = nav;
+  const { draft, patchDraft } = nav;
 
   const status = nav.generated
     ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones`
@@ -35,7 +37,7 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
           label={<Typography variant="caption">Mostrar navmesh en verde</Typography>}
         />
         {nav.dirty && !nav.generated && (
-          <Alert severity="warning" sx={{ my: 1, py: 0 }}>Las conexiones cambiaron: regenera y publica el navmesh.</Alert>
+          <Alert severity="warning" sx={{ my: 1, py: 0 }}>Las conexiones o los parches cambiaron: regenera y publica el navmesh.</Alert>
         )}
         {nav.error && <Alert severity="error" onClose={() => nav.setError(null)} sx={{ my: 1, py: 0 }}>{nav.error}</Alert>}
         {nav.generating && (
@@ -61,6 +63,70 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
           )}
         </Stack>
       </Box>
+
+      <Divider />
+
+      {/* ── Parches de suelo ───────────────────────────────── */}
+      <Box sx={{ p: 1.5, pb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Parches de suelo ({nav.patches.length})</Typography>
+        <Button size="small" startIcon={<AddRoundedIcon />} disabled={nav.drawingPatch} onClick={nav.startPatch}>Nuevo</Button>
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
+        Rellenan tramos que el escaneo no capturó. Marca el contorno del hueco con clics sobre el piso escaneado de
+        alrededor, montándolo unos 30 cm sobre él para que quede unido. Sobre el hueco el punto queda a la altura del parche.
+      </Typography>
+
+      {patchDraft && (
+        <Box sx={{ m: 1.5, p: 1.5, border: 1, borderColor: 'warning.main', borderRadius: 2 }}>
+          {nav.drawingPatch && (
+            <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+              {patchDraft.points.length === 0
+                ? 'Haz clic en el piso, en una esquina del hueco.'
+                : patchDraft.points.length < 3
+                  ? `Sigue el contorno: faltan ${3 - patchDraft.points.length} punto(s).`
+                  : 'Agrega más puntos o pulsa Terminar.'}
+            </Alert>
+          )}
+          <TextField
+            size="small" fullWidth label="Nombre" value={patchDraft.label}
+            onChange={e => nav.setPatchDraft({ ...patchDraft, label: e.target.value })}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            {patchDraft.points.length} puntos · {nav.patchDraftArea.toFixed(2)} m²
+            {patchDraft.points.length > 0 && ` · altura ${Math.min(...patchDraft.points.map(p => p.y)).toFixed(2)}–${Math.max(...patchDraft.points.map(p => p.y)).toFixed(2)} m`}
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', rowGap: 1 }}>
+            <Button size="small" startIcon={<UndoRoundedIcon />} disabled={!patchDraft.points.length} onClick={nav.undoPatchPoint}>
+              Deshacer punto
+            </Button>
+            {nav.drawingPatch
+              ? <Button size="small" onClick={() => nav.setDrawingPatch(false)}>Terminar</Button>
+              : <Button size="small" onClick={() => nav.setDrawingPatch(true)}>Agregar puntos</Button>}
+            {patchDraft.points.length > 0 && (
+              <Button size="small" onClick={() => { nav.setPatchDraft({ ...patchDraft, points: [] }); nav.setDrawingPatch(true); }}>
+                Redibujar
+              </Button>
+            )}
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+            <Button size="small" variant="contained" disabled={patchDraft.points.length < 3 || nav.savingPatch} onClick={nav.savePatch}>
+              Guardar
+            </Button>
+            <Button size="small" onClick={nav.cancelPatch}>Cancelar</Button>
+            {patchDraft.id && (
+              <Button size="small" color="error" onClick={() => nav.removePatch(patchDraft.id!)}>Eliminar</Button>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+      <List dense sx={{ py: 0 }}>
+        {nav.patches.map(p => (
+          <ListItemButton key={p.id} selected={p.id === nav.selectedPatchId} onClick={() => nav.selectPatch(p.id!)}>
+            <ListItemText primary={p.label} secondary={`${p.points.length} puntos · ${patchArea(p.points).toFixed(1)} m²`} />
+          </ListItemButton>
+        ))}
+      </List>
 
       <Divider />
 

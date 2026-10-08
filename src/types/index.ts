@@ -102,6 +102,13 @@ export interface NavConnection {
   bidirectional: boolean;
 }
 
+/** Polígono de suelo que se suma al escaneo para rellenar huecos al generar el navmesh. */
+export interface NavPatch {
+  id?: string;
+  label: string;
+  points: ArPoint[];
+}
+
 export interface NavMeshInfo {
   updatedAt: string;
   updatedBy: string;

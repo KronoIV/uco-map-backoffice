@@ -127,6 +127,9 @@ export default function PoiEditorPage() {
     if (id.startsWith('conn:')) {
       setTab('nav');
       nav.select(id.slice(5));
+    } else if (id.startsWith('patch:')) {
+      setTab('nav');
+      nav.selectPatch(id.slice(6));
     } else if (id.startsWith('room:')) {
       const room = rooms.find(r => r.roomId === id.slice(5));
       if (room) selectRoom(room);
@@ -302,8 +305,10 @@ export default function PoiEditorPage() {
               meshes={visibleMeshes}
               markers={markers}
               connections={nav.viewerConnections}
+              patches={nav.viewerPatches}
               navMesh={nav.viewerNavMesh}
               clipY={clipY}
+              pickPlaneY={tab === 'nav' ? nav.pickPlaneY : null}
               focus={focus}
               onPick={p => {
                 if (tab === 'nav') nav.handlePick(p);
@@ -319,7 +324,9 @@ export default function PoiEditorPage() {
           <Typography variant="caption" color="text.secondary" sx={{ px: 1.5, py: 0.75 }}>
             Arrastra para rotar · clic derecho para desplazar · rueda para zoom · usa el corte de altura para ver cada piso.
             {tab === 'nav'
-              ? ' Verde = zona caminable; naranja = escaleras.'
+              ? nav.drawingPatch
+                ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Retroceso deshace · Enter termina.'
+                : ' Verde = zona caminable; naranja = escaleras; azul = parches de suelo.'
               : selected ? ' Clic sobre el modelo para ubicar el punto.' : ' Selecciona un salón para ubicar su punto.'}
           </Typography>
         </Paper>

@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { navigationService } from '../../services/navigationService';
 import { resolveApiError } from '../../services/api';
 import { readNavMesh, type NavMeshPreview } from '../../utils/navmesh';
+import { appendPatches, patchArea } from '../../utils/navPatches';
 import sceneConnectionsData from '../../data/sceneConnections.json';
-import type { ArPoint, NavConnection } from '../../types';
-import type { MapViewerApi, ViewerConnection } from './MapViewer';
+import type { ArPoint, NavConnection, NavPatch } from '../../types';
+import type { MapViewerApi, ViewerConnection, ViewerPatch } from './MapViewer';
 
 interface SceneConnection {
   label: string;
@@ -32,6 +33,18 @@ export interface DraftConnection {
 
 export type PickTarget = 'start' | 'end' | null;
 
+export interface DraftPatch {
+  id?: string;
+  label: string;
+  points: ArPoint[];
+}
+
+const centroid = (pts: ArPoint[]): ArPoint => ({
+  x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+  y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+  z: pts.reduce((s, p) => s + p.z, 0) / pts.length,
+});
+
 interface Generated {
   data: Uint8Array;
   preview: NavMeshPreview;
@@ -44,6 +57,7 @@ export function useNavigationEditor(
 ) {
   const qc = useQueryClient();
   const connectionsQ = useQuery({ queryKey: ['nav-connections'], queryFn: navigationService.getConnections });
+  const patchesQ = useQuery({ queryKey: ['nav-patches'], queryFn: navigationService.getPatches });
   const infoQ = useQuery({ queryKey: ['navmesh-info'], queryFn: navigationService.getNavMeshInfo });
   const currentQ = useQuery({
     queryKey: ['navmesh-current', infoQ.data?.updatedAt ?? 'scene'],
@@ -65,8 +79,12 @@ export function useNavigationEditor(
   const [dirty, setDirty] = useState(false);
   const [showNavMesh, setShowNavMesh] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPatchId, setSelectedPatchId] = useState<string | null>(null);
+  const [patchDraft, setPatchDraft] = useState<DraftPatch | null>(null);
+  const [drawingPatch, setDrawingPatch] = useState(false);
 
   const connections = useMemo(() => connectionsQ.data ?? [], [connectionsQ.data]);
+  const patches = useMemo(() => patchesQ.data ?? [], [patchesQ.data]);
 
   const invalidateConnections = () => {
     qc.invalidateQueries({ queryKey: ['nav-connections'] });
@@ -106,6 +124,70 @@ export function useNavigationEditor(
     onError: err => setError(resolveApiError(err)),
   });
 
+  const invalidatePatches = () => {
+    qc.invalidateQueries({ queryKey: ['nav-patches'] });
+    setDirty(true);
+    cancelPatch();
+  };
+
+  const savePatchMut = useMutation({
+    mutationFn: (p: NavPatch) => (p.id ? navigationService.updatePatch(p.id, p) : navigationService.createPatch(p)),
+    onSuccess: invalidatePatches,
+    onError: err => setError(resolveApiError(err)),
+  });
+
+  const deletePatchMut = useMutation({
+    mutationFn: (id: string) => navigationService.deletePatch(id),
+    onSuccess: invalidatePatches,
+    onError: err => setError(resolveApiError(err)),
+  });
+
+  function cancelPatch() {
+    setPatchDraft(null);
+    setSelectedPatchId(null);
+    setDrawingPatch(false);
+  }
+
+  function startPatch() {
+    cancel();
+    setSelectedPatchId(null);
+    setPatchDraft({ label: `Parche ${patches.length + 1}`, points: [] });
+    setDrawingPatch(true);
+  }
+
+  function selectPatch(id: string) {
+    const p = patches.find(x => x.id === id);
+    if (!p) return;
+    cancel();
+    setSelectedPatchId(id);
+    setPatchDraft({ id: p.id, label: p.label, points: p.points });
+    setDrawingPatch(false);
+    onFocus(centroid(p.points));
+  }
+
+  const undoPatchPoint = () => setPatchDraft(d => (d ? { ...d, points: d.points.slice(0, -1) } : d));
+
+  function savePatch() {
+    if (!patchDraft || patchDraft.points.length < 3) return;
+    savePatchMut.mutate({ ...patchDraft, label: patchDraft.label.trim() || 'Parche' });
+  }
+
+  // Atajos mientras se dibuja: deshacer el último punto y terminar
+  useEffect(() => {
+    if (!drawingPatch) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Backspace' || (e.key.toLowerCase() === 'z' && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        undoPatchPoint();
+      } else if (e.key === 'Escape' || e.key === 'Enter') {
+        setDrawingPatch(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawingPatch]);
+
   function cancel() {
     setDraft(null);
     setSelectedId(null);
@@ -113,6 +195,7 @@ export function useNavigationEditor(
   }
 
   function startNew() {
+    cancelPatch();
     setSelectedId(null);
     setDraft({ label: `Escalera ${connections.length + 1}`, group: '', start: null, end: null, radius: 1, bidirectional: true });
     setPickTarget('start');
@@ -121,6 +204,7 @@ export function useNavigationEditor(
   function select(id: string) {
     const c = connections.find(x => x.id === id);
     if (!c) return;
+    cancelPatch();
     setSelectedId(id);
     setDraft({ ...c, group: c.group ?? '' });
     setPickTarget(null);
@@ -129,6 +213,10 @@ export function useNavigationEditor(
 
   /** Devuelve true si el clic se us\u00f3 para la conexi\u00f3n en edici\u00f3n. */
   function handlePick(p: ArPoint): boolean {
+    if (patchDraft && drawingPatch) {
+      setPatchDraft({ ...patchDraft, points: [...patchDraft.points, p] });
+      return true;
+    }
     if (!draft || !pickTarget) return false;
     if (pickTarget === 'start') {
       setDraft({ ...draft, start: p });
@@ -156,6 +244,7 @@ export function useNavigationEditor(
       return;
     }
     setGenerating(true);
+    const input = appendPatches(geometry.positions, geometry.indices, patches);
     const worker = new Worker(new URL('../../workers/navmeshWorker.ts', import.meta.url), { type: 'module' });
     try {
       const result = await new Promise<{ ok: true; data: Uint8Array; preview: NavMeshPreview } | { ok: false; error: string }>(
@@ -163,12 +252,12 @@ export function useNavigationEditor(
           worker.onmessage = e => resolve(e.data);
           worker.onerror = e => reject(new Error(e.message));
           worker.postMessage({
-            positions: geometry.positions,
-            indices: geometry.indices,
+            positions: input.positions,
+            indices: input.indices,
             connections: connections.map(c => ({
               startPosition: c.start, endPosition: c.end, radius: c.radius, bidirectional: c.bidirectional,
             })),
-          }, [geometry.positions.buffer, geometry.indices.buffer]);
+          }, [input.positions.buffer, input.indices.buffer]);
         },
       );
       if (!result.ok) throw new Error(result.error);
@@ -192,6 +281,19 @@ export function useNavigationEditor(
     }
     return list;
   }, [connections, selectedId, draft]);
+
+  const viewerPatches = useMemo<ViewerPatch[]>(() => {
+    const list: ViewerPatch[] = patches
+      .filter(p => p.id !== selectedPatchId)
+      .map(p => ({ id: p.id!, label: p.label, points: p.points, selected: false, selectable: !drawingPatch && !pickTarget }));
+    if (patchDraft?.points.length) {
+      list.push({ id: patchDraft.id ?? 'draft', label: patchDraft.label, points: patchDraft.points, selected: true, selectable: false });
+    }
+    return list;
+  }, [patches, selectedPatchId, patchDraft, drawingPatch, pickTarget]);
+
+  // Sin modelo bajo el cursor (el hueco), el punto queda a la altura del parche
+  const pickPlaneY = drawingPatch && patchDraft?.points.length ? centroid(patchDraft.points).y : null;
 
   const shownPreview = generated?.preview ?? currentQ.data?.preview ?? null;
 
@@ -229,6 +331,23 @@ export function useNavigationEditor(
     restoreScene: () => restoreMut.mutate(),
     handlePick,
     viewerConnections,
+    patches,
+    patchesLoading: patchesQ.isLoading,
+    patchDraft,
+    setPatchDraft,
+    patchDraftArea: patchDraft ? patchArea(patchDraft.points) : 0,
+    selectedPatchId,
+    drawingPatch,
+    setDrawingPatch,
+    startPatch,
+    selectPatch,
+    cancelPatch,
+    undoPatchPoint,
+    savePatch,
+    savingPatch: savePatchMut.isPending,
+    removePatch: (id: string) => deletePatchMut.mutate(id),
+    viewerPatches,
+    pickPlaneY,
     viewerNavMesh: showNavMesh ? shownPreview : null,
   };
 }
