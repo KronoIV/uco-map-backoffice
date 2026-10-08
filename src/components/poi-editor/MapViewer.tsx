@@ -63,13 +63,22 @@ const NO_CLIP = 1e6;
 const PLANE_SNAP_M = 0.5;
 const MOVE_SPEED = 6;
 const FAST_FACTOR = 3;
+const TURN_SPEED = Math.PI / 2;
+// Sin llegar a mirar recto arriba/abajo, donde el giro horizontal se vuelve inestable
+const MIN_POLAR = 0.05;
+const MAX_POLAR = Math.PI - 0.05;
 // [adelante, derecha, arriba] por tecla (e.code, independiente de la distribución del teclado)
 const MOVE_KEYS: Record<string, [number, number, number]> = {
-  KeyW: [1, 0, 0], ArrowUp: [1, 0, 0],
-  KeyS: [-1, 0, 0], ArrowDown: [-1, 0, 0],
-  KeyD: [0, 1, 0], ArrowRight: [0, 1, 0],
-  KeyA: [0, -1, 0], ArrowLeft: [0, -1, 0],
+  KeyW: [1, 0, 0],
+  KeyS: [-1, 0, 0],
+  KeyD: [0, 1, 0],
+  KeyA: [0, -1, 0],
   KeyE: [0, 0, 1], KeyQ: [0, 0, -1],
+};
+// [giro a la izquierda, mirar arriba]
+const LOOK_KEYS: Record<string, [number, number]> = {
+  ArrowLeft: [1, 0], ArrowRight: [-1, 0],
+  ArrowUp: [0, 1], ArrowDown: [0, -1],
 };
 
 function isTyping(target: EventTarget | null) {
@@ -501,7 +510,7 @@ class ViewerEngine {
 
   private handleKeyDown = (e: KeyboardEvent) => {
     this.fast = e.shiftKey;
-    if (!(e.code in MOVE_KEYS) || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+    if (!(e.code in MOVE_KEYS || e.code in LOOK_KEYS) || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
     e.preventDefault();
     this.keys.add(e.code);
   };
@@ -516,8 +525,12 @@ class ViewerEngine {
   /** Desplaza cámara y punto de giro juntos, en el plano del piso según hacia dónde se mira. */
   private move(dt: number) {
     if (!this.keys.size) return;
+    this.look(dt);
     let f = 0, r = 0, u = 0;
-    for (const k of this.keys) { const [kf, kr, ku] = MOVE_KEYS[k]; f += kf; r += kr; u += ku; }
+    for (const k of this.keys) {
+      const m = MOVE_KEYS[k];
+      if (m) { f += m[0]; r += m[1]; u += m[2]; }
+    }
     const forward = this.camera.getWorldDirection(new THREE.Vector3()).setY(0);
     // Mirando recto hacia abajo: "adelante" es la parte de arriba de la pantalla
     if (forward.lengthSq() < 1e-6) forward.set(0, 1, 0).applyQuaternion(this.camera.quaternion).setY(0);
@@ -531,6 +544,21 @@ class ViewerEngine {
     step.normalize().multiplyScalar(MOVE_SPEED * (this.fast ? FAST_FACTOR : 1) * dt);
     this.camera.position.add(step);
     this.controls.target.add(step);
+  }
+
+  /** Gira la mirada sobre la posición de la cámara (primera persona): mueve el punto de giro, no la cámara. */
+  private look(dt: number) {
+    let yaw = 0, pitch = 0;
+    for (const k of this.keys) {
+      const l = LOOK_KEYS[k];
+      if (l) { yaw += l[0]; pitch += l[1]; }
+    }
+    if (!yaw && !pitch) return;
+    const angle = TURN_SPEED * (this.fast ? 2 : 1) * dt;
+    const offset = new THREE.Spherical().setFromVector3(this.controls.target.clone().sub(this.camera.position));
+    offset.theta += yaw * angle;
+    offset.phi = THREE.MathUtils.clamp(offset.phi - pitch * angle, MIN_POLAR, MAX_POLAR);
+    this.controls.target.copy(this.camera.position).add(new THREE.Vector3().setFromSpherical(offset));
   }
 
   private handleUp = (e: PointerEvent) => {
