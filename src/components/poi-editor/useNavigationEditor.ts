@@ -292,8 +292,8 @@ export function useNavigationEditor(
     return list;
   }, [patches, selectedPatchId, patchDraft, drawingPatch, pickTarget]);
 
-  // Sin modelo bajo el cursor (el hueco), el punto queda a la altura del parche
-  const pickPlaneY = drawingPatch && patchDraft?.points.length ? centroid(patchDraft.points).y : null;
+  // Cada punto toma la altura del modelo (rampas, escaleras); sobre el hueco, la del punto anterior
+  const pickPlaneY = drawingPatch && patchDraft?.points.length ? patchDraft.points[patchDraft.points.length - 1].y : null;
 
   const shownPreview = generated?.preview ?? currentQ.data?.preview ?? null;
 

@@ -73,7 +73,9 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
       </Box>
       <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
         Rellenan tramos que el escaneo no capturó. Marca el contorno del hueco con clics sobre el piso escaneado de
-        alrededor, montándolo unos 30 cm sobre él para que quede unido. Sobre el hueco el punto queda a la altura del parche.
+        alrededor, montándolo unos 30 cm sobre él para que quede unido. Cada punto toma la altura del modelo, así
+        que en escaleras y rampas el parche queda inclinado. Shift+clic (o clic sobre el hueco) pone el punto a la
+        altura del anterior.
       </Typography>
 
       {patchDraft && (

@@ -46,7 +46,7 @@ interface MapViewerProps {
   patches: ViewerPatch[];
   navMesh: NavMeshPreview | null;
   clipY: number | null;
-  /** Altura del plano donde cae el clic si no hay modelo debajo (o está lejos de ella). */
+  /** Altura del último punto: el clic cae ahí si no hay piso debajo, si toca una pared o con Shift. */
   pickPlaneY: number | null;
   focus: ArPoint | null;
   onPick: (p: ArPoint) => void;
@@ -59,8 +59,8 @@ interface MapViewerProps {
 
 const CACHE_NAME = 'ucomap-multiset-meshes';
 const NO_CLIP = 1e6;
-// Un clic que cae más lejos que esto del plano del parche (pared, piso de abajo) se proyecta al plano
-const PLANE_SNAP_M = 0.5;
+// Normal más horizontal que esto = pared: el clic no está sobre el piso
+const WALL_NORMAL_Y = 0.5;
 const MOVE_SPEED = 6;
 const FAST_FACTOR = 3;
 const TURN_SPEED = Math.PI / 2;
@@ -583,7 +583,9 @@ class ViewerEngine {
     const hit = this.raycaster.intersectObjects(this.meshRoot.children, true).find(h => h.point.y <= limit);
     const planeY = this.props.pickPlaneY;
     let point = hit?.point ?? null;
-    if (planeY !== null && (!point || Math.abs(point.y - planeY) > PLANE_SNAP_M)) {
+    const onWall = !!hit?.face
+      && Math.abs(hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y) < WALL_NORMAL_Y;
+    if (planeY !== null && (!point || onWall || e.shiftKey)) {
       point = this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY), new THREE.Vector3());
     }
     if (point) this.props.onPick({ x: round(point.x), y: round(point.y), z: round(point.z) });

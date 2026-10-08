@@ -52,7 +52,6 @@ export default function PoiEditorPage() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'rooms' | 'nav'>('rooms');
-  const [approxFocus, setApproxFocus] = useState(false);
   const viewerApiRef = useRef<MapViewerApi | null>(null);
   const nav = useNavigationEditor(() => viewerApiRef.current, (meshesQ.data ?? []).map(m => m.name), setFocus);
 
@@ -103,24 +102,12 @@ export default function PoiEditorPage() {
   const knownPosition = (room: Room) =>
     room.arPosition ?? (pinForRoom(room) ? toPoint(pinForRoom(room)!.position) : null);
 
-  // Sin punto propio: centro de los salones de la misma categoría (su edificio)
-  const buildingCenter = (room: Room): ArPoint | null => {
-    const pts = rooms
-      .filter(r => r.category === room.category && r.roomId !== room.roomId)
-      .map(knownPosition)
-      .filter((p): p is ArPoint => p !== null);
-    if (!pts.length) return null;
-    const sum = pts.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y, z: a.z + p.z }), { x: 0, y: 0, z: 0 });
-    return { x: sum.x / pts.length, y: sum.y / pts.length, z: sum.z / pts.length };
-  };
-
+  // Sin punto la cámara se queda donde está: el admin suele estar ya frente al salón que va a ubicar
   const selectRoom = (room: Room) => {
     setSelectedId(room.roomId);
     setDraft(null);
     const exact = knownPosition(room);
-    const target = exact ?? buildingCenter(room);
-    setApproxFocus(!exact && !!target);
-    if (target) setFocus({ ...target });
+    if (exact) setFocus({ ...exact });
   };
 
   const handleMarkerClick = (id: string) => {
@@ -214,9 +201,7 @@ export default function PoiEditorPage() {
                   ? 'Punto nuevo sin guardar'
                   : selected.arPosition
                     ? 'Punto guardado'
-                    : approxFocus
-                      ? `Sin punto: la vista se centró en el edificio ${selected.category}. Haz clic en el modelo para ubicarlo.`
-                      : 'Haz clic en el modelo 3D para ubicar el punto'}
+                    : 'Haz clic en el modelo 3D para ubicar el punto'}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ my: 1 }}>
                 {(['x', 'y', 'z'] as const).map(axis => (
@@ -325,7 +310,7 @@ export default function PoiEditorPage() {
             Arrastra para rotar · clic derecho para desplazar · rueda para zoom · WASD para moverte (Q/E bajar/subir) · flechas para girar la cámara · Shift rápido · usa el corte de altura para ver cada piso.
             {tab === 'nav'
               ? nav.drawingPatch
-                ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Retroceso deshace · Enter termina.'
+                ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Shift+clic = a la altura del punto anterior · Retroceso deshace · Enter termina.'
                 : ' Verde = zona caminable; naranja = escaleras; azul = parches de suelo.'
               : selected ? ' Clic sobre el modelo para ubicar el punto.' : ' Selecciona un salón para ubicar su punto.'}
           </Typography>
