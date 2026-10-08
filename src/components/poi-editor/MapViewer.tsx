@@ -61,6 +61,23 @@ const CACHE_NAME = 'ucomap-multiset-meshes';
 const NO_CLIP = 1e6;
 // Un clic que cae más lejos que esto del plano del parche (pared, piso de abajo) se proyecta al plano
 const PLANE_SNAP_M = 0.5;
+const MOVE_SPEED = 6;
+const FAST_FACTOR = 3;
+// [adelante, derecha, arriba] por tecla (e.code, independiente de la distribución del teclado)
+const MOVE_KEYS: Record<string, [number, number, number]> = {
+  KeyW: [1, 0, 0], ArrowUp: [1, 0, 0],
+  KeyS: [-1, 0, 0], ArrowDown: [-1, 0, 0],
+  KeyD: [0, 1, 0], ArrowRight: [0, 1, 0],
+  KeyA: [0, -1, 0], ArrowLeft: [0, -1, 0],
+  KeyE: [0, 0, 1], KeyQ: [0, 0, -1],
+};
+
+function isTyping(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
+    || ['combobox', 'listbox', 'option', 'menuitem'].includes(el.getAttribute('role') ?? '');
+}
 const MARKER_COLORS: Record<MarkerKind, number> = {
   room: 0x00a86b,
   selected: 0x1e88e5,
@@ -146,6 +163,9 @@ class ViewerEngine {
   });
   private readonly container: HTMLElement;
   private downAt: { x: number; y: number } | null = null;
+  private readonly keys = new Set<string>();
+  private fast = false;
+  private readonly clock = new THREE.Clock();
 
   constructor(container: HTMLElement, props: MapViewerProps) {
     this.container = container;
@@ -178,11 +198,15 @@ class ViewerEngine {
 
     this.renderer.domElement.addEventListener('pointerdown', this.handleDown);
     this.renderer.domElement.addEventListener('pointerup', this.handleUp);
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
+    window.addEventListener('blur', this.releaseKeys);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
 
     this.renderer.setAnimationLoop(() => {
+      this.move(Math.min(this.clock.getDelta(), 0.1));
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
       this.labels.render(this.scene, this.camera);
@@ -475,6 +499,40 @@ class ViewerEngine {
 
   private handleDown = (e: PointerEvent) => { this.downAt = { x: e.clientX, y: e.clientY }; };
 
+  private handleKeyDown = (e: KeyboardEvent) => {
+    this.fast = e.shiftKey;
+    if (!(e.code in MOVE_KEYS) || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+    e.preventDefault();
+    this.keys.add(e.code);
+  };
+
+  private handleKeyUp = (e: KeyboardEvent) => {
+    this.fast = e.shiftKey;
+    this.keys.delete(e.code);
+  };
+
+  private releaseKeys = () => { this.keys.clear(); };
+
+  /** Desplaza cámara y punto de giro juntos, en el plano del piso según hacia dónde se mira. */
+  private move(dt: number) {
+    if (!this.keys.size) return;
+    let f = 0, r = 0, u = 0;
+    for (const k of this.keys) { const [kf, kr, ku] = MOVE_KEYS[k]; f += kf; r += kr; u += ku; }
+    const forward = this.camera.getWorldDirection(new THREE.Vector3()).setY(0);
+    // Mirando recto hacia abajo: "adelante" es la parte de arriba de la pantalla
+    if (forward.lengthSq() < 1e-6) forward.set(0, 1, 0).applyQuaternion(this.camera.quaternion).setY(0);
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
+    const step = new THREE.Vector3()
+      .addScaledVector(forward, f)
+      .addScaledVector(right, r)
+      .addScaledVector(this.camera.up, u);
+    if (step.lengthSq() === 0) return;
+    step.normalize().multiplyScalar(MOVE_SPEED * (this.fast ? FAST_FACTOR : 1) * dt);
+    this.camera.position.add(step);
+    this.controls.target.add(step);
+  }
+
   private handleUp = (e: PointerEvent) => {
     const start = this.downAt;
     this.downAt = null;
@@ -521,6 +579,9 @@ class ViewerEngine {
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener('pointerdown', this.handleDown);
     this.renderer.domElement.removeEventListener('pointerup', this.handleUp);
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    window.removeEventListener('blur', this.releaseKeys);
     this.controls.dispose();
     for (const obj of this.loaded.values()) this.disposeObject(obj);
     this.markerMat.forEach(m => m.dispose());

@@ -322,7 +322,7 @@ export default function PoiEditorPage() {
             />
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ px: 1.5, py: 0.75 }}>
-            Arrastra para rotar · clic derecho para desplazar · rueda para zoom · usa el corte de altura para ver cada piso.
+            Arrastra para rotar · clic derecho para desplazar · rueda para zoom · WASD o flechas para moverte (Q/E bajar/subir, Shift rápido) · usa el corte de altura para ver cada piso.
             {tab === 'nav'
               ? nav.drawingPatch
                 ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Retroceso deshace · Enter termina.'
