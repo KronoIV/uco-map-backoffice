@@ -9,7 +9,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, useWatch, Controller } from 'react-hook-form';
 import PageHeader from '../components/PageHeader';
 import { eventService, type CampusEventInput } from '../services/eventService';
 import { roomService } from '../services/roomService';
@@ -20,6 +20,12 @@ import { poiTypeOf } from '../utils/poi-catalog';
 import type { CampusEvent, EventPlaceType } from '../types';
 
 const MAX_DAYS = 90;
+const DURATIONS = [
+  { label: '15 min', minutes: 15 },
+  { label: '30 min', minutes: 30 },
+  { label: '1 h', minutes: 60 },
+  { label: '2 h', minutes: 120 },
+];
 const switchSx = {
   '& .MuiSwitch-switchBase.Mui-checked': { color: '#00d084' },
   '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#00d084' },
@@ -134,7 +140,17 @@ function EventFormDialog({ event, initial, onClose }: { event: CampusEvent | nul
   const qc = useQueryClient();
   const { places, loading } = usePlaces();
   const [mutError, setMutError] = useState<string | null>(null);
-  const { control, handleSubmit, formState: { errors } } = useForm<EventFormData>({ defaultValues: initial });
+  const { control, handleSubmit, setValue, formState: { errors } } = useForm<EventFormData>({ defaultValues: initial });
+  const [startsAt, endsAt] = useWatch({ control, name: ['startsAt', 'endsAt'] });
+  const durationMin = (Date.parse(endsAt) - Date.parse(startsAt)) / 60_000;
+  const setDuration = (minutes: number) => {
+    let start = Date.parse(startsAt);
+    if (Number.isNaN(start)) {
+      start = new Date().setSeconds(0, 0);
+      setValue('startsAt', toLocalInput(new Date(start)));
+    }
+    setValue('endsAt', toLocalInput(new Date(start + minutes * 60_000)), { shouldValidate: true, shouldDirty: true });
+  };
 
   const mutation = useMutation({
     mutationFn: (data: CampusEventInput) => (event ? eventService.update(event.id, data) : eventService.create(data)),
@@ -226,7 +242,18 @@ function EventFormDialog({ event, initial, onClose }: { event: CampusEvent | nul
           <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Horario visible en la app
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, mt: -0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: -0.5 }}>
+            <Typography variant="body2" color="text.secondary">Duración:</Typography>
+            {DURATIONS.map(d => {
+              const selected = durationMin === d.minutes;
+              return (
+                <Chip key={d.minutes} label={d.label} size="small" clickable onClick={() => setDuration(d.minutes)}
+                  variant={selected ? 'filled' : 'outlined'}
+                  sx={selected ? { bgcolor: '#00d084', color: '#fff', fontWeight: 600, '&:hover': { bgcolor: '#00b574' } } : { fontWeight: 500 }} />
+              );
+            })}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2 }}>
             <Controller
               name="startsAt"
               control={control}

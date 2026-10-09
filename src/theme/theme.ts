@@ -95,6 +95,12 @@ const theme = createTheme({
             borderColor: '#00d084',
             borderWidth: 1.5,
           },
+          // The fixed pill height clips textareas: their text spilled over the label and the next field
+          '&.MuiInputBase-multiline': {
+            height: 'auto',
+            borderRadius: 12,
+            padding: 0,
+          },
         },
         input: {
           padding: '6px 14px',
