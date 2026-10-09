@@ -49,6 +49,25 @@ export interface GraphEdge {
   active: boolean;
 }
 
+// ──────────────── Campus events ───────────────────────────────
+/** ROOM = Room.roomId; POI = nodeId de un punto de interés del mapa. */
+export type EventPlaceType = 'ROOM' | 'POI';
+
+export interface CampusEvent {
+  id: string;
+  title: string;
+  description?: string | null;
+  placeType: EventPlaceType;
+  placeId: string;
+  placeNote?: string | null;
+  /** ISO instant: la app lo muestra solo entre startsAt y endsAt. */
+  startsAt: string;
+  endsAt: string;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // ──────────────── Building ────────────────────────────────────
 export interface Building {
   buildingId: string;

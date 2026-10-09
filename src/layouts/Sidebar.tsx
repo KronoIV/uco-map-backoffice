@@ -14,6 +14,7 @@ import {
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
 import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded';
+import EventRoundedIcon from '@mui/icons-material/EventRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
@@ -29,6 +30,7 @@ const navItems = [
   { label: 'Dashboard', icon: <DashboardRoundedIcon fontSize="small" />, path: '/' },
   { label: 'Mapa', icon: <MapRoundedIcon fontSize="small" />, path: '/map' },
   { label: 'Campus', icon: <ApartmentRoundedIcon fontSize="small" />, path: '/campus' },
+  { label: 'Eventos', icon: <EventRoundedIcon fontSize="small" />, path: '/events' },
   { label: 'Actividad', icon: <InsightsRoundedIcon fontSize="small" />, path: '/sessions' },
   { label: 'Usuarios', icon: <PeopleRoundedIcon fontSize="small" />, path: '/users' },
 ];
