@@ -68,7 +68,16 @@ function usePlaces() {
       });
     const byText = (a: PlaceOption, b: PlaceOption) =>
       a.group.localeCompare(b.group, 'es') || a.label.localeCompare(b.label, 'es', { numeric: true });
-    return [...roomPlaces.sort(byText), ...poiPlaces.sort(byText)];
+    // Edificios sin salones (coliseo, cancha) también pueden ser el lugar de un evento
+    const buildingPlaces: PlaceOption[] = all.filter(b => b.active).map(b => {
+      const count = (rooms.data ?? []).filter(r => r.active && (r.category === b.category || r.category === b.buildingId)).length;
+      return {
+        key: placeKey('BUILDING', b.buildingId), type: 'BUILDING', id: b.buildingId, label: b.label,
+        detail: count ? `Todo el edificio · ${count} lugar${count === 1 ? '' : 'es'}` : 'Todo el edificio',
+        group: 'Edificios',
+      };
+    });
+    return [...buildingPlaces.sort(byText), ...roomPlaces.sort(byText), ...poiPlaces.sort(byText)];
   }, [rooms.data, nodes.data, buildings.data]);
 
   return { places, loading: rooms.isLoading || nodes.isLoading || buildings.isLoading };
@@ -221,7 +230,7 @@ function EventFormDialog({ event, initial, onClose }: { event: CampusEvent | nul
                   </Box>
                 )}
                 renderInput={params => (
-                  <TextField {...params} label="Lugar" placeholder="Busca un salón, oficina o punto de interés"
+                  <TextField {...params} label="Lugar" placeholder="Busca un edificio, salón, oficina o punto de interés"
                     error={!!errors.placeKey}
                     helperText={errors.placeKey?.message ?? 'La app guía hasta aquí con «Cómo llegar». Para un lugar al aire libre, crea un punto de interés en Mapa.'} />
                 )}

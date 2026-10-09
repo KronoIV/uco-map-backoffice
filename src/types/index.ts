@@ -50,8 +50,8 @@ export interface GraphEdge {
 }
 
 // ──────────────── Campus events ───────────────────────────────
-/** ROOM = Room.roomId; POI = nodeId de un punto de interés del mapa. */
-export type EventPlaceType = 'ROOM' | 'POI';
+/** ROOM = Room.roomId; POI = nodeId de un punto de interés del mapa; BUILDING = Building.buildingId (edificio entero). */
+export type EventPlaceType = 'ROOM' | 'POI' | 'BUILDING';
 
 export interface CampusEvent {
   id: string;
