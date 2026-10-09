@@ -1442,7 +1442,7 @@ const MAP_SUBTITLES: Record<MapTab, string> = {
   editor: 'Nodos y caminos exteriores que usa la navegación GPS',
   preview: 'Simula la ruta que verá un estudiante en el mapa exterior',
   pixel: 'Ubica los nodos sobre la imagen 2D del campus',
-  ar: 'Destinos de cada salón y escaleras sobre el escaneo 3D de MultiSet',
+  ar: 'Destinos de cada lugar y escaleras sobre el escaneo 3D de MultiSet',
 };
 
 export default function MapPage() {

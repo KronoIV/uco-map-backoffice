@@ -2,12 +2,11 @@ import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert, Box, Button, Chip, InputAdornment, LinearProgress, List, ListItemButton, ListItemIcon,
-  ListItemText, OutlinedInput, Paper, Slider, Stack, Switch, FormControlLabel, Tab, Tabs, TextField, Tooltip, Typography,
+  ListItemText, OutlinedInput, Paper, Slider, Stack, Switch, FormControlLabel, Tab, Tabs, TextField, Typography,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
-import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import MapViewer, { type MapViewerApi, type ViewerMarker } from '../components/poi-editor/MapViewer';
 import NavigationPanel from '../components/poi-editor/NavigationPanel';
 import { useNavigationEditor } from '../components/poi-editor/useNavigationEditor';
@@ -25,7 +24,7 @@ interface ScenePin {
   stateIds: string[];
 }
 
-// Pines que existían en Scene.zcomp (Mattercraft), extraídos una sola vez como referencia
+// Pines de la escena AR anterior: se ofrecen como punto sugerido (editable) a los lugares sin punto
 const scenePins = scenePinsData as ScenePin[];
 
 const toPoint = (p: [number, number, number]): ArPoint => ({ x: p[0], y: p[1], z: p[2] });
@@ -56,11 +55,12 @@ export default function PoiEditorPage() {
   const nav = useNavigationEditor(() => viewerApiRef.current, (meshesQ.data ?? []).map(m => m.name), setFocus);
 
   const rooms = useMemo(
-    () => [...(roomsQ.data ?? [])].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)),
+    () => (roomsQ.data ?? [])
+      .filter(r => r.active)
+      .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)),
     [roomsQ.data],
   );
   const selected = rooms.find(r => r.roomId === selectedId) ?? null;
-  const importable = rooms.filter(r => !r.arPosition && pinForRoom(r));
 
   const visibleMeshes = useMemo(
     () => (meshesQ.data ?? []).filter(m => !hiddenMaps.has(m.name)),
@@ -70,10 +70,13 @@ export default function PoiEditorPage() {
   const markers = useMemo<ViewerMarker[]>(() => {
     const list: ViewerMarker[] = [];
     const placedStateIds = new Set(rooms.filter(r => r.arPosition).map(r => r.stateId));
+    const pendingStateIds = new Set(rooms.filter(r => !r.arPosition && !(r.roomId === selectedId && draft)).map(r => r.stateId));
     if (showReference) {
       scenePins
-        .filter(p => !p.stateIds.some(s => placedStateIds.has(s)))
-        .forEach((p, i) => list.push({ id: `ref:${i}`, label: p.label, position: toPoint(p.position), kind: 'reference' }));
+        .forEach((p, i) => {
+          if (p.stateIds.some(s => placedStateIds.has(s)) || !p.stateIds.some(s => pendingStateIds.has(s))) return;
+          list.push({ id: `ref:${i}`, label: p.label, position: toPoint(p.position), kind: 'reference' });
+        });
     }
     for (const r of rooms) {
       if (!r.arPosition) continue;
@@ -91,22 +94,12 @@ export default function PoiEditorPage() {
     onError: err => setError(resolveApiError(err)),
   });
 
-  const importMut = useMutation({
-    mutationFn: async () => {
-      for (const r of importable) await roomService.setArPosition(r.roomId, toPoint(pinForRoom(r)!.position));
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rooms'] }),
-    onError: err => setError(resolveApiError(err)),
-  });
-
-  const knownPosition = (room: Room) =>
-    room.arPosition ?? (pinForRoom(room) ? toPoint(pinForRoom(room)!.position) : null);
-
-  // Sin punto la cámara se queda donde está: el admin suele estar ya frente al salón que va a ubicar
+  // Sin punto la cámara se queda donde está: el admin suele estar ya frente al lugar que va a ubicar
   const selectRoom = (room: Room) => {
     setSelectedId(room.roomId);
-    setDraft(null);
-    const exact = knownPosition(room);
+    const suggested = room.arPosition ? null : pinForRoom(room);
+    setDraft(suggested ? toPoint(suggested.position) : null);
+    const exact = room.arPosition ?? (suggested ? toPoint(suggested.position) : null);
     if (exact) setFocus({ ...exact });
   };
 
@@ -120,8 +113,11 @@ export default function PoiEditorPage() {
     } else if (id.startsWith('room:')) {
       const room = rooms.find(r => r.roomId === id.slice(5));
       if (room) selectRoom(room);
-    } else if (id.startsWith('ref:') && selected) {
-      setDraft(toPoint(scenePins[Number(id.slice(4))].position));
+    } else if (id.startsWith('ref:')) {
+      const pin = scenePins[Number(id.slice(4))];
+      const room = rooms.find(r => !r.arPosition && pin.stateIds.includes(r.stateId));
+      if (room) selectRoom(room);
+      else if (selected) setDraft(toPoint(pin.position));
     }
   };
 
@@ -143,16 +139,6 @@ export default function PoiEditorPage() {
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {importable.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}>
-          <Tooltip title="Copia la posición de los pines que ya existían en Mattercraft a los salones que aún no tienen punto">
-            <Button size="small" variant="outlined" startIcon={<HistoryRoundedIcon />} disabled={importMut.isPending} onClick={() => importMut.mutate()}>
-              Importar de Mattercraft ({importable.length})
-            </Button>
-          </Tooltip>
-        </Box>
-      )}
-
       {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
       {meshesQ.isError && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -161,16 +147,16 @@ export default function PoiEditorPage() {
       )}
 
       <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
-        {/* ── Panel de salones ─────────────────────────────────────── */}
+        {/* ── Panel de lugares ───────────────────────────────────────── */}
         <Paper sx={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}>
-            <Tab value="rooms" label="Salones" sx={{ minHeight: 40 }} />
+            <Tab value="rooms" label="Lugares" sx={{ minHeight: 40 }} />
             <Tab value="nav" label="Navegación" sx={{ minHeight: 40 }} />
           </Tabs>
           {tab === 'nav' ? <NavigationPanel nav={nav} /> : (<>
           <Box sx={{ p: 1.5 }}>
             <OutlinedInput
-              size="small" fullWidth placeholder="Buscar salón…" value={search}
+              size="small" fullWidth placeholder="Buscar lugar…" value={search}
               onChange={e => setSearch(e.target.value)}
               startAdornment={<InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment>}
             />
@@ -186,7 +172,7 @@ export default function PoiEditorPage() {
                 </ListItemIcon>
                 <ListItemText
                   primary={r.name}
-                  secondary={r.arPosition ? fmt(r.arPosition) : pinForRoom(r) ? 'Solo en Mattercraft' : 'Sin punto'}
+                  secondary={r.arPosition ? fmt(r.arPosition) : pinForRoom(r) ? 'Punto sugerido sin guardar' : 'Sin punto'}
                 />
                 <Chip size="small" label={r.category} sx={{ ml: 1 }} />
               </ListItemButton>
@@ -198,7 +184,7 @@ export default function PoiEditorPage() {
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{selected.name}</Typography>
               <Typography variant="caption" color="text.secondary">
                 {draft
-                  ? 'Punto nuevo sin guardar'
+                  ? 'Punto sin guardar: ajústalo con un clic en el modelo o con X/Y/Z y guarda'
                   : selected.arPosition
                     ? 'Punto guardado'
                     : 'Haz clic en el modelo 3D para ubicar el punto'}
@@ -224,8 +210,8 @@ export default function PoiEditorPage() {
                   Guardar
                 </Button>
                 <Button size="small" disabled={!draft} onClick={() => setDraft(null)}>Descartar</Button>
-                {!draft && pinForRoom(selected) && (
-                  <Button size="small" onClick={() => setDraft(toPoint(pinForRoom(selected)!.position))}>Usar pin de Mattercraft</Button>
+                {!draft && !selected.arPosition && pinForRoom(selected) && (
+                  <Button size="small" onClick={() => setDraft(toPoint(pinForRoom(selected)!.position))}>Usar punto sugerido</Button>
                 )}
                 {selected.arPosition && !draft && (
                   <Button size="small" color="error" disabled={saveMut.isPending}
@@ -269,7 +255,7 @@ export default function PoiEditorPage() {
             )}
             <FormControlLabel
               control={<Switch size="small" checked={showReference} onChange={e => setShowReference(e.target.checked)} />}
-              label={<Typography variant="caption">Pines de Mattercraft</Typography>}
+              label={<Typography variant="caption">Puntos sugeridos</Typography>}
             />
           </Stack>
           {(meshesQ.isLoading || loading.length > 0) && (
@@ -312,7 +298,7 @@ export default function PoiEditorPage() {
               ? nav.drawingPatch
                 ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Shift+clic = a la altura del punto anterior · Retroceso deshace · Enter termina.'
                 : ' Verde = zona caminable; naranja = escaleras; azul = parches de suelo.'
-              : selected ? ' Clic sobre el modelo para ubicar el punto.' : ' Selecciona un salón para ubicar su punto.'}
+              : selected ? ' Clic sobre el modelo para ubicar el punto.' : ' Selecciona un lugar para ubicar su punto.'}
           </Typography>
         </Paper>
       </Box>

@@ -6,8 +6,6 @@ const BASE = '/api/navigation';
 export const navigationService = {
   getConnections: () => api.get<NavConnection[]>(`${BASE}/connections`).then(r => r.data),
   createConnection: (c: NavConnection) => api.post<NavConnection>(`${BASE}/connections`, c).then(r => r.data),
-  createConnections: (list: NavConnection[]) =>
-    api.post<NavConnection[]>(`${BASE}/connections/bulk`, list).then(r => r.data),
   updateConnection: (id: string, c: NavConnection) =>
     api.put<NavConnection>(`${BASE}/connections/${id}`, c).then(r => r.data),
   deleteConnection: (id: string) => api.delete(`${BASE}/connections/${id}`),
@@ -19,7 +17,7 @@ export const navigationService = {
 
   getNavMeshInfo: () => api.get<NavMeshInfo | null>(`${BASE}/navmesh/info`).then(r => r.data),
 
-  /** Navmesh publicado; null si no hay (la app usa el de la escena de Mattercraft). */
+  /** Navmesh publicado; null si no hay (la app usa el que trae incluido). */
   getNavMesh: async (): Promise<Uint8Array | null> => {
     try {
       const r = await api.get<ArrayBuffer>(`${BASE}/navmesh`, { responseType: 'arraybuffer' });
@@ -35,6 +33,4 @@ export const navigationService = {
       headers: { 'Content-Type': 'application/octet-stream' },
       timeout: 60000,
     }),
-
-  deleteNavMesh: () => api.delete(`${BASE}/navmesh`),
 };

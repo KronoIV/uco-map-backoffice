@@ -23,6 +23,8 @@ export interface ViewerConnection {
   start: ArPoint;
   end: ArPoint | null;
   selected: boolean;
+  /** Se puede tocar para editarla (no mientras se marca un punto). */
+  selectable: boolean;
 }
 
 export interface ViewerPatch {
@@ -317,14 +319,15 @@ class ViewerEngine {
     this.clearLabels(this.connRoot);
     for (const c of connections) {
       const group = new THREE.Group();
-      group.userData = { markerId: `conn:${c.id}`, minY: Math.min(c.start.y, c.end?.y ?? c.start.y), keep: c.selected };
+      const markerId = c.selectable ? `conn:${c.id}` : undefined;
+      group.userData = { minY: Math.min(c.start.y, c.end?.y ?? c.start.y), keep: c.selected };
       const endMat = c.selected ? this.connMat.endSelected : this.connMat.end;
       const points = [c.start, ...(c.end ? [c.end] : [])];
       for (const p of points) {
         const s = new THREE.Mesh(this.connEndGeo, endMat);
         s.position.set(p.x, p.y, p.z);
         s.renderOrder = 11;
-        s.userData.markerId = `conn:${c.id}`;
+        s.userData.markerId = markerId;
         group.add(s);
       }
       if (c.end) {
@@ -336,7 +339,7 @@ class ViewerEngine {
           c.selected ? this.connMat.lineSelected : this.connMat.line,
         );
         line.renderOrder = 11;
-        line.userData.markerId = `conn:${c.id}`;
+        line.userData.markerId = markerId;
         group.add(line);
       }
       if (c.selected || !c.end) {

@@ -4,22 +4,8 @@ import { navigationService } from '../../services/navigationService';
 import { resolveApiError } from '../../services/api';
 import { readNavMesh, type NavMeshPreview, type PatchCheck } from '../../utils/navmesh';
 import { patchArea } from '../../utils/navPatches';
-import sceneConnectionsData from '../../data/sceneConnections.json';
 import type { ArPoint, NavConnection, NavPatch } from '../../types';
 import type { MapViewerApi, ViewerConnection, ViewerPatch } from './MapViewer';
-
-interface SceneConnection {
-  label: string;
-  group: string;
-  start: [number, number, number];
-  end: [number, number, number];
-  radius: number;
-  bidirectional: boolean;
-}
-
-// Escaleras que exist\u00edan en Scene.zcomp (Mattercraft), extra\u00eddas una sola vez
-const sceneConnections = sceneConnectionsData as SceneConnection[];
-const toPoint = (p: [number, number, number]): ArPoint => ({ x: p[0], y: p[1], z: p[2] });
 
 export interface DraftConnection {
   id?: string;
@@ -61,14 +47,12 @@ export function useNavigationEditor(
   const patchesQ = useQuery({ queryKey: ['nav-patches'], queryFn: navigationService.getPatches });
   const infoQ = useQuery({ queryKey: ['navmesh-info'], queryFn: navigationService.getNavMeshInfo });
   const currentQ = useQuery({
-    queryKey: ['navmesh-current', infoQ.data?.updatedAt ?? 'scene'],
+    queryKey: ['navmesh-current', infoQ.data?.updatedAt ?? 'none'],
     enabled: infoQ.isSuccess,
     staleTime: Infinity,
     queryFn: async () => {
       const published = await navigationService.getNavMesh();
-      if (published) return { source: 'backend' as const, preview: await readNavMesh(published) };
-      const res = await fetch('/scene.navmesh');
-      return { source: 'scene' as const, preview: await readNavMesh(new Uint8Array(await res.arrayBuffer())) };
+      return published ? { preview: await readNavMesh(published) } : null;
     },
   });
 
@@ -106,23 +90,8 @@ export function useNavigationEditor(
     onError: err => setError(resolveApiError(err)),
   });
 
-  const importMut = useMutation({
-    mutationFn: () => navigationService.createConnections(sceneConnections.map(c => ({
-      label: c.label, group: c.group, start: toPoint(c.start), end: toPoint(c.end),
-      radius: c.radius, bidirectional: c.bidirectional,
-    }))),
-    onSuccess: invalidateConnections,
-    onError: err => setError(resolveApiError(err)),
-  });
-
   const publishMut = useMutation({
     mutationFn: (data: Uint8Array) => navigationService.saveNavMesh(data),
-    onSuccess: () => { setGenerated(null); qc.invalidateQueries({ queryKey: ['navmesh-info'] }); },
-    onError: err => setError(resolveApiError(err)),
-  });
-
-  const restoreMut = useMutation({
-    mutationFn: () => navigationService.deleteNavMesh(),
     onSuccess: () => { setGenerated(null); qc.invalidateQueries({ queryKey: ['navmesh-info'] }); },
     onError: err => setError(resolveApiError(err)),
   });
@@ -288,12 +257,12 @@ export function useNavigationEditor(
   const viewerConnections = useMemo<ViewerConnection[]>(() => {
     const list: ViewerConnection[] = connections
       .filter(c => c.id !== selectedId)
-      .map(c => ({ id: c.id!, label: c.label, start: c.start, end: c.end, selected: false }));
+      .map(c => ({ id: c.id!, label: c.label, start: c.start, end: c.end, selected: false, selectable: !drawingPatch && !pickTarget }));
     if (draft?.start) {
-      list.push({ id: draft.id ?? 'draft', label: draft.label, start: draft.start, end: draft.end, selected: true });
+      list.push({ id: draft.id ?? 'draft', label: draft.label, start: draft.start, end: draft.end, selected: true, selectable: false });
     }
     return list;
-  }, [connections, selectedId, draft]);
+  }, [connections, selectedId, draft, drawingPatch, pickTarget]);
 
   const viewerPatches = useMemo<ViewerPatch[]>(() => {
     const list: ViewerPatch[] = patches
@@ -313,9 +282,8 @@ export function useNavigationEditor(
   return {
     connections,
     connectionsLoading: connectionsQ.isLoading,
-    sceneConnectionCount: sceneConnections.length,
     info: infoQ.data ?? null,
-    currentSource: currentQ.data?.source ?? null,
+    currentLoaded: currentQ.isSuccess,
     currentPreview: currentQ.data?.preview ?? null,
     generated,
     generating,
@@ -335,13 +303,10 @@ export function useNavigationEditor(
     save,
     saving: saveMut.isPending,
     remove: (id: string) => deleteMut.mutate(id),
-    importFromScene: () => importMut.mutate(),
-    importing: importMut.isPending,
     generate,
     publish: () => generated && publishMut.mutate(generated.data),
     publishing: publishMut.isPending,
     discardGenerated: () => setGenerated(null),
-    restoreScene: () => restoreMut.mutate(),
     handlePick,
     viewerConnections,
     patches,

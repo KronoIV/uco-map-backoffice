@@ -3,7 +3,6 @@ import {
   Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
@@ -51,10 +50,10 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
 
   const status = nav.generated
     ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones${nav.generated.removed ? ` · ${nav.generated.removed} triángulos del escaneo ignorados sobre parches` : ''}`
-    : nav.currentSource === 'backend' && nav.info
-      ? `Publicado ${new Date(nav.info.updatedAt).toLocaleString()} · ${(nav.info.sizeBytes / 1024).toFixed(0)} KB · ${nav.currentPreview?.offMeshConnections ?? '?'} conexiones`
-      : nav.currentSource === 'scene'
-        ? `Usando el de Mattercraft · ${nav.currentPreview?.offMeshConnections ?? '?'} conexiones`
+    : nav.info && nav.currentPreview
+      ? `Publicado ${new Date(nav.info.updatedAt).toLocaleString()} · ${(nav.info.sizeBytes / 1024).toFixed(0)} KB · ${nav.currentPreview.offMeshConnections} conexiones`
+      : nav.currentLoaded
+        ? 'Aún no hay navmesh publicado: regenera y publica.'
         : 'Cargando…';
 
   return (
@@ -89,9 +88,6 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
               </Button>
               <Button size="small" onClick={nav.discardGenerated}>Descartar</Button>
             </>
-          )}
-          {!nav.generated && nav.currentSource === 'backend' && (
-            <Button size="small" color="warning" onClick={nav.restoreScene}>Volver al de Mattercraft</Button>
           )}
         </Stack>
       </Box>
@@ -185,13 +181,6 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
       <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
         Unen dos zonas sin suelo continuo (escaleras). Marca un punto en cada extremo, sobre el piso.
       </Typography>
-      {nav.connections.length === 0 && !nav.connectionsLoading && (
-        <Box sx={{ px: 1.5, pt: 1 }}>
-          <Button size="small" variant="outlined" startIcon={<HistoryRoundedIcon />} disabled={nav.importing} onClick={nav.importFromScene}>
-            Importar de Mattercraft ({nav.sceneConnectionCount})
-          </Button>
-        </Box>
-      )}
 
       {draft && (
         <Box sx={{ m: 1.5, p: 1.5, border: 1, borderColor: 'primary.main', borderRadius: 2 }}>
