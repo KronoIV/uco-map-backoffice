@@ -35,6 +35,13 @@ function checkText(c: PatchCheck | undefined): { ok: boolean; short: string; hel
       help: 'Es caminable pero está aislado: ningún lado llega al piso escaneado. Monta sus bordes unos 30 cm sobre el piso de alrededor y que la diferencia de altura en la unión sea menor a 30 cm.',
     };
   }
+  if (c.links === 1) {
+    return {
+      ok: false,
+      short: `${pct} · unido solo por 1 lado`,
+      help: 'Si el parche une dos zonas (p. ej. una escalera), el otro extremo no empalma: su borde quedó más de 30 cm por encima o por debajo del piso. Pon esos puntos sobre el piso de llegada (no sobre el último peldaño).',
+    };
+  }
   return { ok: true, short: `${pct} · unido por ${c.links} de ${c.sides} lados` };
 }
 

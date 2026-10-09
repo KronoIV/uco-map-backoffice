@@ -1,8 +1,24 @@
 import { ShapeUtils, Vector2 } from 'three';
 import type { ArPoint } from '../types';
 
-// Triángulos del escaneo más grandes que esto (paredes, techos) no se recortan si solo asoman sobre el parche
-const MAX_CARVE_EDGE = 0.5;
+type P3 = [number, number, number];
+
+const ON_LINE = 1e-9;
+// Recast también rasteriza triángulos sin área: las astillas del recorte harían de techo sobre el parche
+const MIN_PIECE_AREA = 1e-6;
+
+/** Área 3D del polígono (las paredes tienen área aunque en planta sean una línea). */
+function area3(poly: P3[]) {
+  let nx = 0, ny = 0, nz = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x0, y0, z0] = poly[i];
+    const [x1, y1, z1] = poly[(i + 1) % poly.length];
+    nx += (y0 - y1) * (z0 + z1);
+    ny += (z0 - z1) * (x0 + x1);
+    nz += (x0 - x1) * (y0 + y1);
+  }
+  return Math.hypot(nx, ny, nz) / 2;
+}
 
 /** Área en planta (m²) del polígono. */
 export function patchArea(points: ArPoint[]): number {
@@ -62,9 +78,68 @@ export function surfaceAt(p: PreparedPatch, x: number, z: number): number | null
   return null;
 }
 
+interface ClipTri {
+  a: ArPoint; b: ArPoint; c: ArPoint;
+  /** Para que "dentro" sea el mismo lado en las tres aristas, sea cual sea el sentido del triángulo. */
+  sign: number;
+  minX: number; maxX: number; minZ: number; maxZ: number;
+}
+
+function clipTris(p: PreparedPatch): ClipTri[] {
+  const out: ClipTri[] = [];
+  for (let i = 0; i < p.tris.length; i += 3) {
+    const a = p.points[p.tris[i]], b = p.points[p.tris[i + 1]], c = p.points[p.tris[i + 2]];
+    const cross = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+    if (Math.abs(cross) < 1e-12) continue;
+    out.push({
+      a, b, c, sign: Math.sign(cross),
+      minX: Math.min(a.x, b.x, c.x), maxX: Math.max(a.x, b.x, c.x),
+      minZ: Math.min(a.z, b.z, c.z), maxZ: Math.max(a.z, b.z, c.z),
+    });
+  }
+  return out;
+}
+
+/** Parte un polígono convexo por la recta a→b (en planta): [lado de dentro, lado de fuera]. */
+function split(poly: P3[], a: ArPoint, b: ArPoint, sign: number): [P3[], P3[]] {
+  const f = (p: P3) => sign * ((b.x - a.x) * (p[2] - a.z) - (b.z - a.z) * (p[0] - a.x));
+  const inside: P3[] = [], outside: P3[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i], nxt = poly[(i + 1) % poly.length];
+    const fc = f(cur), fn = f(nxt);
+    if (fc >= -ON_LINE) inside.push(cur);
+    if (fc <= ON_LINE) outside.push(cur);
+    if ((fc > ON_LINE && fn < -ON_LINE) || (fc < -ON_LINE && fn > ON_LINE)) {
+      const t = fc / (fc - fn);
+      const q: P3 = [cur[0] + (nxt[0] - cur[0]) * t, cur[1] + (nxt[1] - cur[1]) * t, cur[2] + (nxt[2] - cur[2]) * t];
+      inside.push(q);
+      outside.push(q);
+    }
+  }
+  return [inside, outside];
+}
+
+function planeY(t: ClipTri, x: number, z: number) {
+  const { a, b, c } = t;
+  const d = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+  const u = ((b.z - c.z) * (x - c.x) + (c.x - b.x) * (z - c.z)) / d;
+  const v = ((c.z - a.z) * (x - c.x) + (a.x - c.x) * (z - c.z)) / d;
+  return u * a.y + v * b.y + (1 - u - v) * c.y;
+}
+
+function overlaps(poly: P3[], t: ClipTri) {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const p of poly) {
+    minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+    minZ = Math.min(minZ, p[2]); maxZ = Math.max(maxZ, p[2]);
+  }
+  return maxX > t.minX && minX < t.maxX && maxZ > t.minZ && minZ < t.maxZ;
+}
+
 /**
- * Suma los parches a la geometría del escaneo que entra a recast y quita los triángulos del escaneo que,
- * dentro de un parche, invaden el espacio libre sobre él (ruido, objetos): el parche manda.
+ * Suma los parches a la geometría del escaneo que entra a recast. Los triángulos del escaneo se recortan por el
+ * contorno del parche y, dentro de él, se quita lo que queda entre `clearance.from` y `clearance.to` sobre su
+ * superficie (peldaños, ruido, objetos): el parche manda. Fuera del contorno el escaneo queda intacto.
  */
 export function applyPatches(
   positions: Float32Array,
@@ -74,46 +149,62 @@ export function applyPatches(
 ): { positions: Float32Array; indices: Uint32Array; removed: number } {
   const prepared = patches.map(p => preparePatch(p.points)).filter(p => p.tris.length);
   if (!prepared.length) return { positions, indices, removed: 0 };
+  const cutters = prepared.flatMap(clipTris);
 
-  const kept = new Uint32Array(indices.length);
-  let kc = 0;
+  const kept: number[] = [];
+  const extraPos: number[] = [];
+  const extraIdx: number[] = [];
+  const baseVerts = positions.length / 3;
+  let removed = 0;
+  const vertex = (i: number): P3 => [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
+
   for (let t = 0; t < indices.length; t += 3) {
-    let drop = false;
-    for (const p of prepared) {
-      let lo = Infinity, hi = -Infinity, inside = 0, intrudes = false, maxEdge = 0;
-      for (let k = 0; k < 3; k++) {
-        const vi = indices[t + k] * 3;
-        const wi = indices[t + (k + 1) % 3] * 3;
-        maxEdge = Math.max(maxEdge, Math.hypot(positions[wi] - positions[vi], positions[wi + 1] - positions[vi + 1], positions[wi + 2] - positions[vi + 2]));
-        const s = surfaceAt(p, positions[vi], positions[vi + 2]);
-        if (s === null) continue;
-        const dy = positions[vi + 1] - s;
-        inside++;
-        lo = Math.min(lo, dy);
-        hi = Math.max(hi, dy);
-        if (dy > clearance.from && dy < clearance.to) intrudes = true;
+    const tri = [vertex(indices[t]), vertex(indices[t + 1]), vertex(indices[t + 2])];
+    if (!cutters.some(c => overlaps(tri, c))) { kept.push(indices[t], indices[t + 1], indices[t + 2]); continue; }
+
+    let pieces: P3[][] = [tri];
+    let changed = false;
+    for (const c of cutters) {
+      const next: P3[][] = [];
+      for (const piece of pieces) {
+        if (!overlaps(piece, c)) { next.push(piece); continue; }
+        let rest = piece;
+        for (const [a, b] of [[c.a, c.b], [c.b, c.c], [c.c, c.a]] as const) {
+          const [inside, outside] = split(rest, a, b, c.sign);
+          if (outside.length >= 3) {
+            changed = true;
+            if (area3(outside) > MIN_PIECE_AREA) next.push(outside);
+          }
+          rest = inside;
+          if (rest.length < 3 || area3(rest) <= MIN_PIECE_AREA) break;
+        }
+        if (rest.length < 3 || area3(rest) <= MIN_PIECE_AREA) continue;
+        const dys = rest.map(p => p[1] - planeY(c, p[0], p[2]));
+        if (Math.max(...dys) > clearance.from && Math.min(...dys) < clearance.to) { removed++; changed = true; }
+        else next.push(rest);
       }
-      // Entero dentro del parche, o un tri\u00e1ngulo peque\u00f1o del escaneo que asoma sobre \u00e9l
-      if ((inside === 3 && hi > clearance.from && lo < clearance.to) || (intrudes && maxEdge <= MAX_CARVE_EDGE)) {
-        drop = true;
-        break;
-      }
+      pieces = next;
     }
-    if (!drop) { kept[kc++] = indices[t]; kept[kc++] = indices[t + 1]; kept[kc++] = indices[t + 2]; }
+
+    if (!changed) { kept.push(indices[t], indices[t + 1], indices[t + 2]); continue; }
+    for (const piece of pieces) {
+      const first = baseVerts + extraPos.length / 3;
+      for (const p of piece) extraPos.push(p[0], p[1], p[2]);
+      for (let k = 1; k < piece.length - 1; k++) extraIdx.push(first, first + k, first + k + 1);
+    }
   }
 
-  const extraVerts = prepared.reduce((n, p) => n + p.points.length, 0);
-  const extraIdx = prepared.reduce((n, p) => n + p.tris.length, 0);
-  const pos = new Float32Array(positions.length + extraVerts * 3);
-  const idx = new Uint32Array(kc + extraIdx);
-  pos.set(positions);
-  idx.set(kept.subarray(0, kc));
-  let vo = positions.length / 3;
-  let io = kc;
+  let vo = baseVerts + extraPos.length / 3;
   for (const p of prepared) {
-    p.points.forEach((q, i) => pos.set([q.x, q.y, q.z], (vo + i) * 3));
-    for (const t of p.tris) idx[io++] = vo + t;
+    for (const q of p.points) extraPos.push(q.x, q.y, q.z);
+    for (const t of p.tris) extraIdx.push(vo + t);
     vo += p.points.length;
   }
-  return { positions: pos, indices: idx, removed: (indices.length - kc) / 3 };
+  const pos = new Float32Array(positions.length + extraPos.length);
+  pos.set(positions);
+  pos.set(extraPos, positions.length);
+  const idx = new Uint32Array(kept.length + extraIdx.length);
+  idx.set(kept);
+  idx.set(extraIdx, kept.length);
+  return { positions: pos, indices: idx, removed };
 }

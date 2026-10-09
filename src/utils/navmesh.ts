@@ -130,8 +130,10 @@ export async function buildNavMesh(
 ): Promise<{ data: Uint8Array; preview: NavMeshPreview; patchChecks: PatchCheck[]; removed: number }> {
   await initRecast();
   const s = NAVMESH_SETTINGS;
+  // Dentro del parche se reemplaza el escaneo desde su superficie hasta la altura libre: hasta un peldaño
+  // unos centímetros por encima actúa como techo bajo y recast corta la ruta
   const { positions, indices, removed } = applyPatches(scanPositions, scanIndices, patches, {
-    from: s.walkableClimb, to: s.walkableHeight,
+    from: -s.cellHeight, to: s.walkableHeight,
   });
   // Misma conversión a unidades de celda que hace Mattercraft en NavigationMesh.generate()
   const result = generateSoloNavMesh(positions, indices, {
