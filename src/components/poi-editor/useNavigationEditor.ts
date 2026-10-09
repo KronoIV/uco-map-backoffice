@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { navigationService } from '../../services/navigationService';
 import { resolveApiError } from '../../services/api';
-import { readNavMesh, type NavMeshPreview } from '../../utils/navmesh';
-import { appendPatches, patchArea } from '../../utils/navPatches';
+import { readNavMesh, type NavMeshPreview, type PatchCheck } from '../../utils/navmesh';
+import { patchArea } from '../../utils/navPatches';
 import sceneConnectionsData from '../../data/sceneConnections.json';
 import type { ArPoint, NavConnection, NavPatch } from '../../types';
 import type { MapViewerApi, ViewerConnection, ViewerPatch } from './MapViewer';
@@ -48,6 +48,7 @@ const centroid = (pts: ArPoint[]): ArPoint => ({
 interface Generated {
   data: Uint8Array;
   preview: NavMeshPreview;
+  removed: number;
 }
 
 export function useNavigationEditor(
@@ -82,6 +83,8 @@ export function useNavigationEditor(
   const [selectedPatchId, setSelectedPatchId] = useState<string | null>(null);
   const [patchDraft, setPatchDraft] = useState<DraftPatch | null>(null);
   const [drawingPatch, setDrawingPatch] = useState(false);
+  // Resultado de la última generación por id de parche; un parche editado después ya no lo tiene
+  const [patchChecks, setPatchChecks] = useState<Record<string, PatchCheck>>({});
 
   const connections = useMemo(() => connectionsQ.data ?? [], [connectionsQ.data]);
   const patches = useMemo(() => patchesQ.data ?? [], [patchesQ.data]);
@@ -132,7 +135,14 @@ export function useNavigationEditor(
 
   const savePatchMut = useMutation({
     mutationFn: (p: NavPatch) => (p.id ? navigationService.updatePatch(p.id, p) : navigationService.createPatch(p)),
-    onSuccess: invalidatePatches,
+    onSuccess: saved => {
+      setPatchChecks(prev => {
+        const next = { ...prev };
+        delete next[saved.id!];
+        return next;
+      });
+      invalidatePatches();
+    },
     onError: err => setError(resolveApiError(err)),
   });
 
@@ -244,24 +254,27 @@ export function useNavigationEditor(
       return;
     }
     setGenerating(true);
-    const input = appendPatches(geometry.positions, geometry.indices, patches);
+    const usedPatches = patches;
     const worker = new Worker(new URL('../../workers/navmeshWorker.ts', import.meta.url), { type: 'module' });
     try {
-      const result = await new Promise<{ ok: true; data: Uint8Array; preview: NavMeshPreview } | { ok: false; error: string }>(
+      type Result = { ok: true; data: Uint8Array; preview: NavMeshPreview; patchChecks: PatchCheck[]; removed: number };
+      const result = await new Promise<Result | { ok: false; error: string }>(
         (resolve, reject) => {
           worker.onmessage = e => resolve(e.data);
           worker.onerror = e => reject(new Error(e.message));
           worker.postMessage({
-            positions: input.positions,
-            indices: input.indices,
+            positions: geometry.positions,
+            indices: geometry.indices,
             connections: connections.map(c => ({
               startPosition: c.start, endPosition: c.end, radius: c.radius, bidirectional: c.bidirectional,
             })),
-          }, [input.positions.buffer, input.indices.buffer]);
+            patches: usedPatches.map(p => ({ points: p.points })),
+          }, [geometry.positions.buffer, geometry.indices.buffer]);
         },
       );
       if (!result.ok) throw new Error(result.error);
-      setGenerated({ data: result.data, preview: result.preview });
+      setGenerated({ data: result.data, preview: result.preview, removed: result.removed });
+      setPatchChecks(Object.fromEntries(usedPatches.map((p, i) => [p.id!, result.patchChecks[i]])));
       setDirty(false);
       setShowNavMesh(true);
     } catch (err) {
@@ -346,6 +359,7 @@ export function useNavigationEditor(
     savePatch,
     savingPatch: savePatchMut.isPending,
     removePatch: (id: string) => deletePatchMut.mutate(id),
+    patchChecks,
     viewerPatches,
     pickPlaneY,
     viewerNavMesh: showNavMesh ? shownPreview : null,

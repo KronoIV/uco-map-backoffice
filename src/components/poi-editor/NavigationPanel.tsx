@@ -8,17 +8,42 @@ import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
 import type { ArPoint } from '../../types';
+import type { PatchCheck } from '../../utils/navmesh';
 import { patchArea } from '../../utils/navPatches';
 import type { NavigationEditor } from './useNavigationEditor';
 
 const fmt = (p: ArPoint | null) => (p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}` : '—');
 const dist = (a: ArPoint, b: ArPoint) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
+const MIN_WALKABLE = 0.6;
+
+/** Qué dice la última generación de este parche y qué hacer si falló. */
+function checkText(c: PatchCheck | undefined): { ok: boolean; short: string; help?: string } | null {
+  if (!c) return null;
+  const pct = `${Math.round(c.walkable * 100)}% caminable`;
+  if (c.walkable < MIN_WALKABLE) {
+    return {
+      ok: false,
+      short: `${pct} · revisar`,
+      help: 'Casi no quedó suelo: suele ser un parche muy angosto (menos de ~50 cm) o demasiado empinado (más de 60°). Hazlo más ancho o revisa la altura de los puntos.',
+    };
+  }
+  if (c.links === 0) {
+    return {
+      ok: false,
+      short: `${pct} · sin unir`,
+      help: 'Es caminable pero está aislado: ningún lado llega al piso escaneado. Monta sus bordes unos 30 cm sobre el piso de alrededor y que la diferencia de altura en la unión sea menor a 30 cm.',
+    };
+  }
+  return { ok: true, short: `${pct} · unido por ${c.links} de ${c.sides} lados` };
+}
+
 export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
   const { draft, patchDraft } = nav;
+  const draftCheck = patchDraft?.id ? checkText(nav.patchChecks[patchDraft.id]) : null;
 
   const status = nav.generated
-    ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones`
+    ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones${nav.generated.removed ? ` · ${nav.generated.removed} triángulos del escaneo ignorados sobre parches` : ''}`
     : nav.currentSource === 'backend' && nav.info
       ? `Publicado ${new Date(nav.info.updatedAt).toLocaleString()} · ${(nav.info.sizeBytes / 1024).toFixed(0)} KB · ${nav.currentPreview?.offMeshConnections ?? '?'} conexiones`
       : nav.currentSource === 'scene'
@@ -75,7 +100,8 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
         Rellenan tramos que el escaneo no capturó. Marca el contorno del hueco con clics sobre el piso escaneado de
         alrededor, montándolo unos 30 cm sobre él para que quede unido. Cada punto toma la altura del modelo, así
         que en escaleras y rampas el parche queda inclinado. Shift+clic (o clic sobre el hueco) pone el punto a la
-        altura del anterior.
+        altura del anterior. Lo que el escaneo tenga encima del parche (hasta 2 m) se ignora. Tras regenerar, cada
+        parche muestra si quedó caminable y unido.
       </Typography>
 
       {patchDraft && (
@@ -97,6 +123,11 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
             {patchDraft.points.length} puntos · {nav.patchDraftArea.toFixed(2)} m²
             {patchDraft.points.length > 0 && ` · altura ${Math.min(...patchDraft.points.map(p => p.y)).toFixed(2)}–${Math.max(...patchDraft.points.map(p => p.y)).toFixed(2)} m`}
           </Typography>
+          {draftCheck && (
+            <Alert severity={draftCheck.ok ? 'success' : 'warning'} sx={{ mt: 1, py: 0 }}>
+              {draftCheck.short}{draftCheck.help && <><br />{draftCheck.help}</>}
+            </Alert>
+          )}
           <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', rowGap: 1 }}>
             <Button size="small" startIcon={<UndoRoundedIcon />} disabled={!patchDraft.points.length} onClick={nav.undoPatchPoint}>
               Deshacer punto
@@ -123,11 +154,18 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
       )}
 
       <List dense sx={{ py: 0 }}>
-        {nav.patches.map(p => (
-          <ListItemButton key={p.id} selected={p.id === nav.selectedPatchId} onClick={() => nav.selectPatch(p.id!)}>
-            <ListItemText primary={p.label} secondary={`${p.points.length} puntos · ${patchArea(p.points).toFixed(1)} m²`} />
-          </ListItemButton>
-        ))}
+        {nav.patches.map(p => {
+          const check = checkText(nav.patchChecks[p.id!]);
+          return (
+            <ListItemButton key={p.id} selected={p.id === nav.selectedPatchId} onClick={() => nav.selectPatch(p.id!)}>
+              <ListItemText
+                primary={p.label}
+                secondary={`${p.points.length} puntos · ${patchArea(p.points).toFixed(1)} m²${check ? ` · ${check.short}` : ''}`}
+                slotProps={{ secondary: { color: check && !check.ok ? 'warning.main' : 'text.secondary' } }}
+              />
+            </ListItemButton>
+          );
+        })}
       </List>
 
       <Divider />

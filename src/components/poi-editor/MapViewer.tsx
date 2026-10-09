@@ -159,7 +159,7 @@ class ViewerEngine {
   };
   private readonly connEndGeo = new THREE.SphereGeometry(0.18, 12, 8);
   private readonly patchMat = {
-    fill: new THREE.MeshBasicMaterial({ color: 0x29b6f6, transparent: true, opacity: 0.45, depthTest: false, side: THREE.DoubleSide }),
+    fill: new THREE.MeshBasicMaterial({ color: 0x29b6f6, transparent: true, opacity: 0.18, depthTest: false, side: THREE.DoubleSide }),
     fillSelected: new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide }),
     line: new THREE.LineBasicMaterial({ color: 0x0288d1, depthTest: false, transparent: true }),
     lineSelected: new THREE.LineBasicMaterial({ color: 0xff6f00, depthTest: false, transparent: true }),
