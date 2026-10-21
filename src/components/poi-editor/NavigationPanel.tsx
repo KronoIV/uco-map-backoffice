@@ -1,10 +1,11 @@
 import {
   Alert, Box, Button, Divider, FormControlLabel, LinearProgress, List, ListItemButton, ListItemText,
-  Stack, Switch, TextField, Typography,
+  Stack, Switch, TextField, Tooltip, Typography,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
 import type { ArPoint } from '../../types';
 import type { PatchCheck } from '../../utils/navmesh';
@@ -89,6 +90,13 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
               <Button size="small" onClick={nav.discardGenerated}>Descartar</Button>
             </>
           )}
+          <Tooltip title="Descarga la geometría que entra a recast (escaneo con parches y conexiones) sin generar ni publicar, para comparar ajustes del navmesh sin conexión (uco-map-app: npm run eval:experiment).">
+            <span>
+              <Button size="small" startIcon={<DownloadRoundedIcon />} disabled={nav.generating || nav.exporting} onClick={nav.exportInput}>
+                Exportar geometría
+              </Button>
+            </span>
+          </Tooltip>
         </Stack>
       </Box>
 

@@ -1,6 +1,7 @@
 import { init, importNavMesh, exportNavMesh, getNavMeshPositionsAndIndices, NavMeshQuery, type NavMesh } from 'recast-navigation';
 import { generateSoloNavMesh } from 'recast-navigation/generators';
 import type { ArPoint } from '../types';
+import { encodeNavMeshInput } from './navmesh-input';
 import { applyPatches, preparePatch, surfaceAt } from './navPatches';
 
 // Mismos valores por defecto que el NavigationMesh de Mattercraft (@zcomponent/three-navigation)
@@ -12,6 +13,17 @@ export const NAVMESH_SETTINGS = {
   walkableRadius: 0.2,
   walkableSlopeAngle: 60,
   borderSize: 0,
+};
+
+/**
+ * Detalle de alturas, en celdas como los recibe recast-navigation: muestras cada 6 × cellSize = 0,6 m y error
+ * máximo de 1 × cellHeight = 0,05 m. Son sus valores por defecto (el navmesh no cambia por escribirlos aquí); antes
+ * de tocarlos, comparar con `npm run eval:experiment` en uco-map-app usando «Exportar geometría». Un
+ * detailSampleDist < 0,9 (sin muestreo) hace fallar recast-navigation 0.43 («memory access out of bounds»).
+ */
+export const NAVMESH_DETAIL = {
+  detailSampleDist: 6,
+  detailSampleMaxError: 1,
 };
 
 export interface NavMeshPreview {
@@ -122,6 +134,34 @@ export async function readNavMesh(data: Uint8Array): Promise<NavMeshPreview> {
   }
 }
 
+/**
+ * Geometría que entra a recast. Dentro del parche se reemplaza el escaneo desde su superficie hasta la altura libre:
+ * hasta un peldaño unos centímetros por encima actúa como techo bajo y recast corta la ruta.
+ */
+function recastGeometry(scanPositions: Float32Array, scanIndices: Uint32Array, patches: { points: ArPoint[] }[]) {
+  const s = NAVMESH_SETTINGS;
+  return applyPatches(scanPositions, scanIndices, patches, { from: -s.cellHeight, to: s.walkableHeight });
+}
+
+/** Archivo con la geometría, las conexiones y los ajustes de una generación, para el experimento offline de la app. */
+export function navMeshInputFile(
+  scanPositions: Float32Array,
+  scanIndices: Uint32Array,
+  connections: OffMeshConnectionInput[],
+  patches: { points: ArPoint[] }[],
+  meshNames: string[],
+) {
+  const { positions, indices, removed } = recastGeometry(scanPositions, scanIndices, patches);
+  return encodeNavMeshInput({
+    createdAt: new Date().toISOString(),
+    settings: { ...NAVMESH_SETTINGS },
+    detail: { ...NAVMESH_DETAIL },
+    connections,
+    meshNames,
+    removed,
+  }, positions, indices);
+}
+
 export async function buildNavMesh(
   scanPositions: Float32Array,
   scanIndices: Uint32Array,
@@ -130,11 +170,7 @@ export async function buildNavMesh(
 ): Promise<{ data: Uint8Array; preview: NavMeshPreview; patchChecks: PatchCheck[]; removed: number }> {
   await initRecast();
   const s = NAVMESH_SETTINGS;
-  // Dentro del parche se reemplaza el escaneo desde su superficie hasta la altura libre: hasta un peldaño
-  // unos centímetros por encima actúa como techo bajo y recast corta la ruta
-  const { positions, indices, removed } = applyPatches(scanPositions, scanIndices, patches, {
-    from: -s.cellHeight, to: s.walkableHeight,
-  });
+  const { positions, indices, removed } = recastGeometry(scanPositions, scanIndices, patches);
   // Misma conversión a unidades de celda que hace Mattercraft en NavigationMesh.generate()
   const result = generateSoloNavMesh(positions, indices, {
     cs: s.cellSize,
@@ -144,6 +180,7 @@ export async function buildNavMesh(
     walkableSlopeAngle: s.walkableSlopeAngle,
     walkableHeight: s.walkableHeight / s.cellHeight,
     borderSize: s.borderSize / s.cellSize,
+    ...NAVMESH_DETAIL,
     offMeshConnections: connections,
   });
   if (!result.success || !result.navMesh) throw new Error(result.error ?? 'No se pudo generar el navmesh');

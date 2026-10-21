@@ -61,6 +61,7 @@ export function useNavigationEditor(
   const [pickTarget, setPickTarget] = useState<PickTarget>(null);
   const [generated, setGenerated] = useState<Generated | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [showNavMesh, setShowNavMesh] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -254,6 +255,51 @@ export function useNavigationEditor(
     }
   }
 
+  /** Descarga la geometría que entraría a recast (sin generar ni publicar) para el experimento offline de la app. */
+  async function exportInput() {
+    const viewer = getViewer();
+    if (!viewer) return;
+    setError(null);
+    const geometry = viewer.collectGeometry();
+    const missing = expectedMaps.filter(n => !geometry.meshNames.includes(n));
+    if (missing.length) {
+      setError(`Activa y espera a que carguen todos los mapas antes de exportar (faltan: ${missing.join(', ')}).`);
+      return;
+    }
+    setExporting(true);
+    const worker = new Worker(new URL('../../workers/navmeshWorker.ts', import.meta.url), { type: 'module' });
+    try {
+      const result = await new Promise<{ ok: true; file: Uint8Array<ArrayBuffer> } | { ok: false; error: string }>(
+        (resolve, reject) => {
+          worker.onmessage = e => resolve(e.data);
+          worker.onerror = e => reject(new Error(e.message));
+          worker.postMessage({
+            mode: 'input',
+            positions: geometry.positions,
+            indices: geometry.indices,
+            connections: connections.map(c => ({
+              startPosition: c.start, endPosition: c.end, radius: c.radius, bidirectional: c.bidirectional,
+            })),
+            patches: patches.map(p => ({ points: p.points })),
+            meshNames: geometry.meshNames,
+          }, [geometry.positions.buffer, geometry.indices.buffer]);
+        },
+      );
+      if (!result.ok) throw new Error(result.error);
+      const url = URL.createObjectURL(new Blob([result.file], { type: 'application/octet-stream' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `navmesh-input-${new Date().toISOString().slice(0, 10)}.bin`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(`No se pudo exportar la geometría: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      worker.terminate();
+      setExporting(false);
+    }
+  }
+
   const viewerConnections = useMemo<ViewerConnection[]>(() => {
     const list: ViewerConnection[] = connections
       .filter(c => c.id !== selectedId)
@@ -304,6 +350,8 @@ export function useNavigationEditor(
     saving: saveMut.isPending,
     remove: (id: string) => deleteMut.mutate(id),
     generate,
+    exportInput,
+    exporting,
     publish: () => generated && publishMut.mutate(generated.data),
     publishing: publishMut.isPending,
     discardGenerated: () => setGenerated(null),
