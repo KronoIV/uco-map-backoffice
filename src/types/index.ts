@@ -232,6 +232,7 @@ export interface NavigationTrip {
   modeSwitches?: number;
   vpsFailures?: number;
   usedAR?: boolean;
+  vpsCalls?: number;
 }
 
 export interface TripFilters {
@@ -259,6 +260,8 @@ export interface TripSummary {
   medianArrivalMs: number | null;
   avgLocalizedMs: number | null;
   avgVpsFailures: number | null;
+  avgVpsCalls: number | null;
+  totalVpsCalls: number;
   byDestination: TripDestinationStats[];
   abandonReasons: { reason: string; count: number }[];
   buildings: string[];

@@ -120,6 +120,8 @@ export interface TripAnalytics {
     arUsageRate: number | null;
     medianLocalizedMs: number | null;
     avgVpsFailures: number | null;
+    avgVpsCalls: number | null;
+    totalVpsCalls: number;
     withOrigin: number;
   };
   destinations: {

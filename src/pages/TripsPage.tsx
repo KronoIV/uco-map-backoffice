@@ -91,6 +91,7 @@ const columns: GridColDef<NavigationTrip>[] = [
     renderCell: ({ value }) => fmtDuration(value as number | undefined),
   },
   { field: 'vpsFailures', headerName: 'Fallos VPS', width: 95, type: 'number' },
+  { field: 'vpsCalls', headerName: 'Llamadas VPS', width: 110, type: 'number' },
   { field: 'modeSwitches', headerName: 'Cambios modo', width: 110, type: 'number' },
   { field: 'usedAR', headerName: 'AR', width: 70, type: 'boolean' },
   { field: 'platform', headerName: 'Plataforma', width: 110 },
@@ -200,8 +201,9 @@ export default function TripsPage() {
           <KpiCard loading={loading} label="Usaron la cámara" value={fmtPercent(s?.arUsageRate)}
             sub={s?.medianLocalizedMs != null
               ? `Se ubican en ${fmtDurationLong(s.medianLocalizedMs)} · ${fmtNumber(s.avgVpsFailures, 1)} fallos de media`
+                + (s.avgVpsCalls != null ? ` · ${fmtNumber(s.avgVpsCalls, 1)} llamadas VPS de media` : '')
               : 'Ningún recorrido llegó a ubicarse con la cámara'}
-            info="Recorridos terminados que abrieron la guía con cámara. Ubicarse = primera ubicación lograda por la cámara (VPS)." />
+            info={`Recorridos terminados que abrieron la guía con cámara. Ubicarse = primera ubicación lograda por la cámara (VPS). Llamadas VPS = consultas a la API de MultiSet (${fmtNumber(s?.totalVpsCalls)} en el periodo).`} />
         </Grid>
       </Grid>
 
