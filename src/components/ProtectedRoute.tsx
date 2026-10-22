@@ -9,7 +9,7 @@ export default function ProtectedRoute() {
   if (isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress sx={{ color: '#00d084' }} />
+        <CircularProgress sx={{ color: '#2F855A' }} />
       </Box>
     );
   }

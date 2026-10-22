@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Box, Button, Typography } from '@mui/material';
 import SearchOffRoundedIcon from '@mui/icons-material/SearchOffRounded';
-import logoFull from '../assets/logo-ucoMap.webp';
+import logoFull from '../assets/ucomap-logo.svg';
 import { useAuth } from '../context/AuthContext';
 
 export default function NotFoundPage() {
@@ -19,26 +19,26 @@ export default function NotFoundPage() {
         textAlign: 'center',
       }}
     >
-      <Box component="img" src={logoFull} alt="UCO Map" sx={{ width: 220, mb: 5, opacity: 0.9 }} />
+      <Box component="img" src={logoFull} alt="UCO Map" sx={{ width: 200, mb: 5 }} />
 
       <Box
         sx={{
           width: 80,
           height: 80,
           borderRadius: '50%',
-          bgcolor: 'rgba(0,208,132,0.12)',
+          bgcolor: 'rgba(47,133,90,0.12)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           mb: 3,
         }}
       >
-        <SearchOffRoundedIcon sx={{ fontSize: 40, color: '#00d084' }} />
+        <SearchOffRoundedIcon sx={{ fontSize: 40, color: '#2F855A' }} />
       </Box>
 
       <Typography
         variant="h1"
-        sx={{ fontSize: '5rem', fontWeight: 800, color: '#004628', lineHeight: 1, mb: 1 }}
+        sx={{ fontSize: '5rem', fontWeight: 800, color: '#276749', lineHeight: 1, mb: 1 }}
       >
         404
       </Typography>
@@ -62,8 +62,8 @@ export default function NotFoundPage() {
             px: 4,
             fontSize: '0.875rem',
             borderRadius: 2,
-            bgcolor: '#004628',
-            '&:hover': { bgcolor: '#003320' },
+            bgcolor: '#2F855A',
+            '&:hover': { bgcolor: '#276749' },
           }}
         >
           Ir al panel principal
@@ -78,8 +78,8 @@ export default function NotFoundPage() {
             px: 4,
             fontSize: '0.875rem',
             borderRadius: 2,
-            bgcolor: '#004628',
-            '&:hover': { bgcolor: '#003320' },
+            bgcolor: '#2F855A',
+            '&:hover': { bgcolor: '#276749' },
           }}
         >
           Ir a inicio de sesión

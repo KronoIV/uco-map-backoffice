@@ -103,10 +103,10 @@ export default function DeviceSessionsPage() {
                   color: 'text.secondary',
                   mx: '2px',
                   '&.Mui-selected': {
-                    bgcolor: '#00d084',
+                    bgcolor: '#2F855A',
                     color: '#fff',
-                    borderColor: '#00d084',
-                    '&:hover': { bgcolor: '#00b874' },
+                    borderColor: '#2F855A',
+                    '&:hover': { bgcolor: '#276749' },
                   },
                 },
               }}

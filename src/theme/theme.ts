@@ -13,12 +13,12 @@ const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#00d084',
-      dark: '#00b874',
+      main: '#2F855A',
+      dark: '#276749',
       contrastText: '#fff',
     },
     secondary: {
-      main: '#004628',
+      main: '#2B7653',
       contrastText: '#fff',
     },
     background: {
@@ -31,9 +31,9 @@ const theme = createTheme({
     },
     divider: '#F1F1F1',
     sidebar: {
-      bg: '#004628',
-      text: 'rgba(255,255,255,0.75)',
-      active: '#00d084',
+      bg: '#2B7653',
+      text: 'rgba(255,255,255,0.86)',
+      active: '#FFFFFF',
     },
   },
   shape: {
@@ -68,8 +68,8 @@ const theme = createTheme({
           '&:hover': { boxShadow: 'none' },
         },
         containedPrimary: {
-          background: '#00d084',
-          '&:hover': { background: '#00b874' },
+          background: '#2F855A',
+          '&:hover': { background: '#276749' },
         },
         outlined: {
           border: '1px solid #E5E7EB',
@@ -92,7 +92,7 @@ const theme = createTheme({
             borderColor: '#D1D5DB',
           },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-            borderColor: '#00d084',
+            borderColor: '#2F855A',
             borderWidth: 1.5,
           },
           // The fixed pill height clips textareas: their text spilled over the label and the next field

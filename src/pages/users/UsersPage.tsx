@@ -390,8 +390,8 @@ export default function UsersPage() {
                           size="small"
                           onChange={() => setToggleTarget(u)}
                           sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#00d084' },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#00d084' },
+                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#2F855A' },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#2F855A' },
                           }}
                         />
                       </Tooltip>
@@ -408,7 +408,7 @@ export default function UsersPage() {
                             onClick={() => handleSendReset(u)}
                             disabled={!!resetStatus[u.id]}
                             sx={{
-                              color: resetStatus[u.id] === 'done' ? '#00d084' :
+                              color: resetStatus[u.id] === 'done' ? '#2F855A' :
                                      resetStatus[u.id] === 'error' ? '#DC2626' :
                                      'text.secondary',
                             }}

@@ -65,7 +65,7 @@ function makeIcon(color: string, borderColor: string, size: number, ring = false
 const NODE_TYPE_META: Record<NodeType, { label: string; help: string; color: string; border: string; size: number }> = {
   WAYPOINT: { label: 'Punto de camino', help: 'Curva o cruce de un sendero', color: '#9CA3AF', border: '#6B7280', size: 11 },
   DOOR: { label: 'Entrada de edificio', help: 'Por donde se entra; va sobre la fachada', color: '#8B5CF6', border: '#5B21B6', size: 14 },
-  BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: '#00d084', border: '#004628', size: 18 },
+  BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: '#00d084', border: '#276749', size: 18 },
   ENTRANCE: { label: 'Entrada al campus', help: 'Portería o acceso desde la calle', color: '#3B82F6', border: '#1E40AF', size: 14 },
   POI: { label: 'Punto de interés', help: 'Auditorio u otro lugar que la app lista aparte', color: '#B45309', border: '#78350F', size: 14 },
 };
@@ -737,7 +737,7 @@ function UserNavPreview({
     node.nodeId === destNodeId || node.nodeId === routeEnd
       ? { color: '#EF4444', border: '#B91C1C', size: 20, ring: true }
       : route?.nodeIds.includes(node.nodeId)
-        ? { color: '#00d084', border: '#004628', size: 14, ring: true }
+        ? { color: '#00d084', border: '#276749', size: 14, ring: true }
         : typeLook(node);
 
   const center: [number, number] =
@@ -1115,7 +1115,7 @@ const RENDER_W = 500;
 const RENDER_H = 800;
 
 const NODE_COLORS: Record<string, { bg: string; border: string; size: number }> = {
-  BUILDING: { bg: '#00d084', border: '#004628', size: 14 },
+  BUILDING: { bg: '#00d084', border: '#276749', size: 14 },
   DOOR: { bg: '#8B5CF6', border: '#5B21B6', size: 11 },
   ENTRANCE: { bg: '#3B82F6', border: '#1E40AF', size: 12 },
   WAYPOINT: { bg: '#9CA3AF', border: '#6B7280', size: 9 },

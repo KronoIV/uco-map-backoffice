@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import logoFull from '../assets/logo-ucoMap.webp';
-import logoShield from '../assets/logo-ucoshield.webp';
+import logoFull from '../assets/ucomap-logo-compact-white.svg';
+import logoShield from '../assets/ucomap-mark.svg';
 import {
   Box,
   List,
@@ -68,17 +68,21 @@ export default function Sidebar() {
           py: '8px',
           px: expanded ? '12px' : '10px',
           justifyContent: expanded ? 'flex-start' : 'center',
-          bgcolor: active ? 'rgba(0,208,132,0.15)' : 'transparent',
+          position: 'relative',
+          bgcolor: active ? 'rgba(255,255,255,0.16)' : 'transparent',
           '&:hover': {
-            bgcolor: active ? 'rgba(0,208,132,0.2)' : 'rgba(255,255,255,0.06)',
+            bgcolor: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
           },
+          '&::before': active
+            ? { content: '""', position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 2, bgcolor: '#FFD43B' }
+            : undefined,
         }}
       >
         <ListItemIcon
           sx={{
             minWidth: 0,
             mr: expanded ? '10px' : 0,
-            color: active ? '#00d084' : 'rgba(255,255,255,0.6)',
+            color: active ? '#fff' : 'rgba(255,255,255,0.75)',
           }}
         >
           {item.icon}
@@ -91,7 +95,7 @@ export default function Sidebar() {
                 sx: {
                   fontSize: '0.8125rem',
                   fontWeight: active ? 600 : 400,
-                  color: active ? '#00d084' : 'rgba(255,255,255,0.75)',
+                  color: active ? '#fff' : 'rgba(255,255,255,0.86)',
                 },
               },
             }}
@@ -116,7 +120,7 @@ export default function Sidebar() {
         width,
         minWidth: width,
         height: '100vh',
-        bgcolor: '#004628',
+        background: 'linear-gradient(180deg, #2E7D58 0%, #27694A 100%)',
         display: 'flex',
         flexDirection: 'column',
         transition: 'width 0.2s ease, min-width 0.2s ease',
@@ -134,27 +138,25 @@ export default function Sidebar() {
           alignItems: 'center',
           px: expanded ? '16px' : 0,
           justifyContent: expanded ? 'space-between' : 'center',
-          borderBottom: expanded ? '1px solid rgba(255,255,255,0.07)' : 'none',
+          borderBottom: expanded ? '1px solid rgba(255,255,255,0.12)' : 'none',
         }}
       >
         {expanded ? (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Box
-                component="img"
-                src={logoFull}
-                alt="UCO Map"
-                sx={{ height: 'auto', width: '150px', objectFit: 'contain' }}
-              />
-            </Box>
+            <Box
+              component="img"
+              src={logoFull}
+              alt="UCO Map"
+              sx={{ height: 36, width: 'auto', display: 'block' }}
+            />
             <ListItemButton
               onClick={() => setExpanded(false)}
               sx={{
                 p: '4px',
                 minWidth: 0,
                 borderRadius: '8px',
-                color: 'rgba(255,255,255,0.5)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.06)', color: '#fff' },
+                color: 'rgba(255,255,255,0.7)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
                 justifyContent: 'center',
                 width: 32,
                 height: 32,
@@ -169,7 +171,7 @@ export default function Sidebar() {
             component="img"
             src={logoShield}
             alt="UCO Map"
-            sx={{ height: 36, width: 36, objectFit: 'contain' }}
+            sx={{ height: 36, width: 36, display: 'block' }}
           />
         )}
       </Box>
@@ -181,7 +183,7 @@ export default function Sidebar() {
             display: 'flex',
             justifyContent: 'center',
             py: '10px',
-            borderBottom: '1px solid rgba(255,255,255,0.07)',
+            borderBottom: '1px solid rgba(255,255,255,0.12)',
           }}
         >
           <ListItemButton
@@ -190,8 +192,8 @@ export default function Sidebar() {
               p: '6px',
               minWidth: 0,
               borderRadius: '8px',
-              color: 'rgba(255,255,255,0.5)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.06)', color: '#fff' },
+              color: 'rgba(255,255,255,0.7)',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
               justifyContent: 'center',
               width: 36,
               height: 36,
@@ -211,7 +213,7 @@ export default function Sidebar() {
         </List>
       </Box>
 
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.07)' }} />
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.12)' }} />
 
       {/* Bottom items */}
       <Box sx={{ pb: '8px', pt: '4px' }}>
@@ -232,15 +234,15 @@ export default function Sidebar() {
                 mb: '2px',
                 py: '8px',
                 px: '12px',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
               }}
             >
-              <ListItemIcon sx={{ minWidth: 0, mr: '10px', color: 'rgba(255,255,255,0.6)' }}>
+              <ListItemIcon sx={{ minWidth: 0, mr: '10px', color: 'rgba(255,255,255,0.75)' }}>
                 <LogoutRoundedIcon fontSize="small" />
               </ListItemIcon>
               <ListItemText
                 primary="Cerrar sesión"
-                slotProps={{ primary: { sx: { fontSize: '0.8125rem', fontWeight: 400, color: 'rgba(255,255,255,0.75)' } } }}
+                slotProps={{ primary: { sx: { fontSize: '0.8125rem', fontWeight: 400, color: 'rgba(255,255,255,0.86)' } } }}
               />
             </ListItemButton>
           </Tooltip>
@@ -255,10 +257,10 @@ export default function Sidebar() {
                 py: '8px',
                 px: '10px',
                 justifyContent: 'center',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
               }}
             >
-              <ListItemIcon sx={{ minWidth: 0, color: 'rgba(255,255,255,0.6)' }}>
+              <ListItemIcon sx={{ minWidth: 0, color: 'rgba(255,255,255,0.75)' }}>
                 <LogoutRoundedIcon fontSize="small" />
               </ListItemIcon>
             </ListItemButton>

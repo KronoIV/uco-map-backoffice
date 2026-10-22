@@ -584,8 +584,8 @@ function RoomsTab() {
                           disabled={toggleMutation.isPending}
                           onChange={() => toggleMutation.mutate(room)}
                           sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#00d084' },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#00d084' },
+                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#2F855A' },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#2F855A' },
                           }}
                         />
                       </Tooltip>
@@ -701,7 +701,7 @@ export default function CampusPage() {
               },
             }}
           >
-            <Box sx={{ color: tab === i ? '#00d084' : 'inherit', display: 'flex' }}>
+            <Box sx={{ color: tab === i ? '#2F855A' : 'inherit', display: 'flex' }}>
               {item.icon}
             </Box>
             {item.label}

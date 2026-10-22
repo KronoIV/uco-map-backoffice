@@ -101,7 +101,7 @@ export default function Navbar() {
             sx={{
               width: 32,
               height: 32,
-              bgcolor: '#004628',
+              background: 'linear-gradient(135deg, #45A876 0%, #276749 100%)',
               fontSize: '0.75rem',
               fontWeight: 700,
             }}

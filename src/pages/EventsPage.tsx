@@ -27,8 +27,8 @@ const DURATIONS = [
   { label: '2 h', minutes: 120 },
 ];
 const switchSx = {
-  '& .MuiSwitch-switchBase.Mui-checked': { color: '#00d084' },
-  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#00d084' },
+  '& .MuiSwitch-switchBase.Mui-checked': { color: '#2F855A' },
+  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#2F855A' },
 };
 
 // ─── Lugares a los que la app sabe llegar ────────────────────────────────────
@@ -258,7 +258,7 @@ function EventFormDialog({ event, initial, onClose }: { event: CampusEvent | nul
               return (
                 <Chip key={d.minutes} label={d.label} size="small" clickable onClick={() => setDuration(d.minutes)}
                   variant={selected ? 'filled' : 'outlined'}
-                  sx={selected ? { bgcolor: '#00d084', color: '#fff', fontWeight: 600, '&:hover': { bgcolor: '#00b574' } } : { fontWeight: 500 }} />
+                  sx={selected ? { bgcolor: '#2F855A', color: '#fff', fontWeight: 600, '&:hover': { bgcolor: '#276749' } } : { fontWeight: 500 }} />
               );
             })}
           </Box>
