@@ -34,11 +34,15 @@ export interface ViewerPatch {
   selected: boolean;
   /** Se puede tocar para editarlo (no mientras se dibuja otro). */
   selectable: boolean;
+  /** Por lado, tras generar: unido al suelo, sin unir cuando debía (pie o final de una escalera) o sin dato. */
+  edges?: Array<'linked' | 'missing' | null>;
 }
 
 export interface MapViewerApi {
   /** Triángulos de las mallas cargadas en el espacio del mapa (entrada para recast). */
   collectGeometry(): { positions: Float32Array; indices: Uint32Array; meshNames: string[] };
+  /** Altura del piso escaneado en (x, z) más cercana a nearY (±0,6 m), o null si no hay. */
+  floorAt(x: number, z: number, nearY: number): number | null;
 }
 
 interface MapViewerProps {
@@ -165,6 +169,8 @@ class ViewerEngine {
     fillSelected: new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide }),
     line: new THREE.LineBasicMaterial({ color: 0x0288d1, depthTest: false, transparent: true }),
     lineSelected: new THREE.LineBasicMaterial({ color: 0xff6f00, depthTest: false, transparent: true }),
+    lineLinked: new THREE.LineBasicMaterial({ color: 0x00e676, depthTest: false, transparent: true }),
+    lineMissing: new THREE.LineBasicMaterial({ color: 0xff1744, depthTest: false, transparent: true }),
     vertex: new THREE.MeshBasicMaterial({ color: 0xff6f00, depthTest: false, transparent: true }),
   };
   private readonly patchVertexGeo = new THREE.SphereGeometry(0.07, 10, 6);
@@ -377,7 +383,17 @@ class ViewerEngine {
         fill.userData.markerId = markerId;
         group.add(fill);
       }
-      if (vectors.length > 1) {
+      if (vectors.length > 1 && p.edges?.length === vectors.length && !p.selected) {
+        p.edges.forEach((status, i) => {
+          const edge = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([vectors[i], vectors[(i + 1) % vectors.length]]),
+            status === 'linked' ? this.patchMat.lineLinked : status === 'missing' ? this.patchMat.lineMissing : this.patchMat.line,
+          );
+          edge.renderOrder = 8;
+          edge.userData.markerId = markerId;
+          group.add(edge);
+        });
+      } else if (vectors.length > 1) {
         const outline = new (vectors.length > 2 ? THREE.LineLoop : THREE.Line)(
           new THREE.BufferGeometry().setFromPoints(vectors),
           p.selected ? this.patchMat.lineSelected : this.patchMat.line,
@@ -447,6 +463,17 @@ class ViewerEngine {
       vo += pos.count;
     }
     return { positions, indices, meshNames: [...this.loaded.keys()] };
+  }
+
+  floorAt(x: number, z: number, nearY: number): number | null {
+    const ray = new THREE.Raycaster(new THREE.Vector3(x, nearY + 0.6, z), new THREE.Vector3(0, -1, 0), 0, 1.2);
+    let best: number | null = null;
+    for (const hit of ray.intersectObjects(this.meshRoot.children, true)) {
+      // El escaneo mezcla caras al derecho y al revés: basta con que sea horizontal
+      if (!hit.face || Math.abs(hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y) < WALL_NORMAL_Y) continue;
+      if (best === null || Math.abs(hit.point.y - nearY) < Math.abs(best - nearY)) best = hit.point.y;
+    }
+    return best;
   }
 
   private clearLabels(root: THREE.Object3D) {
@@ -651,7 +678,10 @@ export default function MapViewer(props: MapViewerProps) {
   useEffect(() => {
     const engine = new ViewerEngine(containerRef.current!, props);
     engineRef.current = engine;
-    props.onReady?.({ collectGeometry: () => engine.collectGeometry() });
+    props.onReady?.({
+      collectGeometry: () => engine.collectGeometry(),
+      floorAt: (x, z, nearY) => engine.floorAt(x, z, nearY),
+    });
     return () => { engine.dispose(); engineRef.current = null; };
     // El motor se crea una sola vez; las props se actualizan en los efectos siguientes
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -48,6 +48,8 @@ export interface PatchCheck {
   /** Lados del parche por los que se llega caminando al suelo escaneado de alrededor. */
   links: number;
   sides: number;
+  /** Por lado (empieza en el vértice del mismo índice): si se llega caminando al suelo de fuera. */
+  linkedSides: boolean[];
 }
 
 /** Si cada extremo de la conexión quedó unido al navmesh (Detour busca suelo a menos de su radio). */
@@ -98,7 +100,7 @@ function checkPatches(navMesh: NavMesh, patches: { points: ArPoint[] }[]): Patch
       const start = covered[Math.floor(covered.length / 2)];
 
       // Un punto del suelo justo fuera de cada lado; ¿se llega caminando desde el interior del parche?
-      let links = 0;
+      const linkedSides = points.map(() => false);
       for (let i = 0; start && i < points.length; i++) {
         const a = points[i], b = points[(i + 1) % points.length];
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
@@ -110,9 +112,9 @@ function checkPatches(navMesh: NavMesh, patches: { points: ArPoint[] }[]): Patch
         if (!r.success || !r.polyRef || surfaceAt(patch, r.point.x, r.point.z) !== null) continue;
         const path = query.computePath(start, r.point).path;
         const last = path[path.length - 1];
-        if (last && Math.hypot(last.x - r.point.x, last.y - r.point.y, last.z - r.point.z) < 0.3) links++;
+        if (last && Math.hypot(last.x - r.point.x, last.y - r.point.y, last.z - r.point.z) < 0.3) linkedSides[i] = true;
       }
-      return { walkable: covered.length / samples.length, links, sides: points.length };
+      return { walkable: covered.length / samples.length, links: linkedSides.filter(Boolean).length, sides: points.length, linkedSides };
     });
   } finally {
     query.destroy();

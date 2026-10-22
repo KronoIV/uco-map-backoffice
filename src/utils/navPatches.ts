@@ -31,6 +31,65 @@ export function patchArea(points: ArPoint[]): number {
   return Math.abs(a) / 2;
 }
 
+// Un parche que sube más que esto es una escalera o rampa: lo que importa es que se una abajo y arriba
+const RAMP_MIN_RISE = 0.3;
+// Lo que la rampa de una escalera se mete en cada piso para que recast la una a él sin depender del clic
+export const STAIRS_APRON = 0.3;
+
+export interface RampInfo {
+  /** Lado (índice del vértice inicial) más bajo y más alto. */
+  bottom: number;
+  top: number;
+  rise: number;
+  /** Pendiente media entre ambos lados (grados). */
+  slopeDeg: number;
+}
+
+/** Si el parche es una rampa (escalera), sus lados de abajo y de arriba; null si es suelo casi plano. */
+export function rampInfo(points: ArPoint[]): RampInfo | null {
+  if (points.length < 3) return null;
+  const mid = (i: number) => {
+    const a = points[i], b = points[(i + 1) % points.length];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+  };
+  let bottom = 0, top = 0;
+  for (let i = 1; i < points.length; i++) {
+    if (mid(i).y < mid(bottom).y) bottom = i;
+    if (mid(i).y > mid(top).y) top = i;
+  }
+  const lo = mid(bottom), hi = mid(top);
+  const rise = hi.y - lo.y;
+  if (rise < RAMP_MIN_RISE) return null;
+  return { bottom, top, rise, slopeDeg: (Math.atan2(rise, Math.hypot(hi.x - lo.x, hi.z - lo.z)) * 180) / Math.PI };
+}
+
+/**
+ * Rampa sobre una escalera a partir de dos esquinas al pie y dos arriba (en cualquier orden de costados): cada lado
+ * se alarga STAIRS_APRON hacia su piso y toma la altura de ese piso (`floorAt`, p. ej. un rayo contra el escaneo),
+ * así queda unida aunque el clic cayera en un escalón. Devuelve el contorno en orden.
+ */
+export function stairsRamp(
+  clicks: [ArPoint, ArPoint, ArPoint, ArPoint],
+  floorAt: (x: number, z: number, nearY: number) => number | null = () => null,
+): ArPoint[] {
+  let [b0, b1, t0, t1] = clicks;
+  if (b0.y + b1.y > t0.y + t1.y) [b0, b1, t0, t1] = [t0, t1, b0, b1];
+  // Cada esquina de arriba con la de abajo de su mismo costado
+  if (Math.hypot(b0.x - t1.x, b0.z - t1.z) + Math.hypot(b1.x - t0.x, b1.z - t0.z)
+    < Math.hypot(b0.x - t0.x, b0.z - t0.z) + Math.hypot(b1.x - t1.x, b1.z - t1.z)) [t0, t1] = [t1, t0];
+  const dx = (t0.x + t1.x - b0.x - b1.x) / 2, dz = (t0.z + t1.z - b0.z - b1.z) / 2;
+  const len = Math.hypot(dx, dz) || 1;
+  const ux = dx / len, uz = dz / len;
+  const out = (p: ArPoint, sign: number): ArPoint => {
+    const x = p.x + sign * ux * STAIRS_APRON, z = p.z + sign * uz * STAIRS_APRON;
+    const y = floorAt(x, z, p.y) ?? p.y;
+    return { x: round3(x), y: round3(y), z: round3(z) };
+  };
+  return [out(b0, -1), out(b1, -1), out(t1, 1), out(t0, 1)];
+}
+
+const round3 = (v: number) => Math.round(v * 1000) / 1000;
+
 /**
  * Triángulos del parche (índices sobre `points`), orientados para que recast los vea con la normal
  * hacia arriba: si no, los marca como no caminables.

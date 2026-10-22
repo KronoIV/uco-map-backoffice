@@ -4,7 +4,7 @@ import { navigationService } from '../../services/navigationService';
 import { resolveApiError } from '../../services/api';
 import { readNavMesh, type BuildResult, type ConnectionCheck, type NavMeshPreview, type PatchCheck } from '../../utils/navmesh';
 import type { BuildReport } from '../../utils/navmesh-builder';
-import { patchArea } from '../../utils/navPatches';
+import { patchArea, rampInfo, stairsRamp } from '../../utils/navPatches';
 import type { ArPoint, NavConnection, NavPatch } from '../../types';
 import type { MapViewerApi, ViewerConnection, ViewerPatch } from './MapViewer';
 
@@ -70,6 +70,8 @@ export function useNavigationEditor(
   const [selectedPatchId, setSelectedPatchId] = useState<string | null>(null);
   const [patchDraft, setPatchDraft] = useState<DraftPatch | null>(null);
   const [drawingPatch, setDrawingPatch] = useState(false);
+  // Escalera guiada: dos esquinas al pie y dos arriba; con la cuarta se arma la rampa
+  const [stairsMode, setStairsMode] = useState(false);
   // Resultado de la última generación por id de parche; un parche editado después ya no lo tiene
   const [patchChecks, setPatchChecks] = useState<Record<string, PatchCheck>>({});
   const [connectionChecks, setConnectionChecks] = useState<Record<string, ConnectionCheck>>({});
@@ -137,6 +139,7 @@ export function useNavigationEditor(
     setPatchDraft(null);
     setSelectedPatchId(null);
     setDrawingPatch(false);
+    setStairsMode(false);
   }
 
   function startPatch() {
@@ -144,6 +147,15 @@ export function useNavigationEditor(
     setSelectedPatchId(null);
     setPatchDraft({ label: `Parche ${patches.length + 1}`, points: [] });
     setDrawingPatch(true);
+    setStairsMode(false);
+  }
+
+  function startStairs() {
+    cancel();
+    setSelectedPatchId(null);
+    setPatchDraft({ label: `Escalera ${patches.filter(p => rampInfo(p.points)).length + 1}`, points: [] });
+    setDrawingPatch(true);
+    setStairsMode(true);
   }
 
   function selectPatch(id: string) {
@@ -153,10 +165,23 @@ export function useNavigationEditor(
     setSelectedPatchId(id);
     setPatchDraft({ id: p.id, label: p.label, points: p.points });
     setDrawingPatch(false);
+    setStairsMode(false);
     onFocus(centroid(p.points));
   }
 
   const undoPatchPoint = () => setPatchDraft(d => (d ? { ...d, points: d.points.slice(0, -1) } : d));
+
+  function redrawPatch() {
+    if (!patchDraft) return;
+    setStairsMode(!!rampInfo(patchDraft.points) || stairsMode);
+    setPatchDraft({ ...patchDraft, points: [] });
+    setDrawingPatch(true);
+  }
+
+  function finishDrawing() {
+    setDrawingPatch(false);
+    setStairsMode(false);
+  }
 
   function savePatch() {
     if (!patchDraft || patchDraft.points.length < 3) return;
@@ -173,6 +198,7 @@ export function useNavigationEditor(
         undoPatchPoint();
       } else if (e.key === 'Escape' || e.key === 'Enter') {
         setDrawingPatch(false);
+        setStairsMode(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -205,7 +231,16 @@ export function useNavigationEditor(
   /** Devuelve true si el clic se us\u00f3 para la conexi\u00f3n en edici\u00f3n. */
   function handlePick(p: ArPoint): boolean {
     if (patchDraft && drawingPatch) {
-      setPatchDraft({ ...patchDraft, points: [...patchDraft.points, p] });
+      const points = [...patchDraft.points, p];
+      if (stairsMode && points.length === 4) {
+        const viewer = getViewer();
+        const ramp = stairsRamp(points as [ArPoint, ArPoint, ArPoint, ArPoint], viewer ? viewer.floorAt : undefined);
+        setPatchDraft({ ...patchDraft, points: ramp });
+        setDrawingPatch(false);
+        setStairsMode(false);
+      } else {
+        setPatchDraft({ ...patchDraft, points });
+      }
       return true;
     }
     if (!draft || !pickTarget) return false;
@@ -325,15 +360,27 @@ export function useNavigationEditor(
   const viewerPatches = useMemo<ViewerPatch[]>(() => {
     const list: ViewerPatch[] = patches
       .filter(p => p.id !== selectedPatchId)
-      .map(p => ({ id: p.id!, label: p.label, points: p.points, selected: false, selectable: !drawingPatch && !pickTarget }));
+      .map(p => {
+        const check = patchChecks[p.id!];
+        const ramp = rampInfo(p.points);
+        // En una escalera, el pie y el final tienen que unirse; los costados suelen dar a paredes
+        const edges = check?.linkedSides?.length === p.points.length
+          ? check.linkedSides.map((linked, i) => (linked ? 'linked' : ramp && (i === ramp.bottom || i === ramp.top) ? 'missing' : null))
+          : undefined;
+        return { id: p.id!, label: p.label, points: p.points, selected: false, selectable: !drawingPatch && !pickTarget, edges };
+      });
     if (patchDraft?.points.length) {
       list.push({ id: patchDraft.id ?? 'draft', label: patchDraft.label, points: patchDraft.points, selected: true, selectable: false });
     }
     return list;
-  }, [patches, selectedPatchId, patchDraft, drawingPatch, pickTarget]);
+  }, [patches, selectedPatchId, patchDraft, drawingPatch, pickTarget, patchChecks]);
 
-  // Cada punto toma la altura del modelo (rampas, escaleras); sobre el hueco, la del punto anterior
-  const pickPlaneY = drawingPatch && patchDraft?.points.length ? patchDraft.points[patchDraft.points.length - 1].y : null;
+  // Cada punto toma la altura del modelo (rampas, escaleras); sobre el hueco, la del punto anterior. En la escalera
+  // guiada el tercer clic va al piso de arriba: no hereda la altura del pie
+  const draftPoints = patchDraft?.points ?? [];
+  const pickPlaneY = drawingPatch && draftPoints.length && !(stairsMode && draftPoints.length === 2)
+    ? draftPoints[draftPoints.length - 1].y
+    : null;
 
   const shownPreview = generated?.preview ?? currentQ.data?.preview ?? null;
 
@@ -374,10 +421,15 @@ export function useNavigationEditor(
     patchDraft,
     setPatchDraft,
     patchDraftArea: patchDraft ? patchArea(patchDraft.points) : 0,
+    patchDraftRamp: patchDraft && !stairsMode ? rampInfo(patchDraft.points) : null,
     selectedPatchId,
     drawingPatch,
     setDrawingPatch,
+    stairsMode,
     startPatch,
+    startStairs,
+    redrawPatch,
+    finishDrawing,
     selectPatch,
     cancelPatch,
     undoPatchPoint,

@@ -6,11 +6,12 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import StairsRoundedIcon from '@mui/icons-material/StairsRounded';
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
 import type { ArPoint } from '../../types';
 import type { ConnectionCheck, PatchCheck } from '../../utils/navmesh';
 import type { BuildReport } from '../../utils/navmesh-builder';
-import { patchArea } from '../../utils/navPatches';
+import { patchArea, rampInfo, type RampInfo } from '../../utils/navPatches';
 import type { NavigationEditor } from './useNavigationEditor';
 
 const fmt = (p: ArPoint | null) => (p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}` : '—');
@@ -40,7 +41,7 @@ function connectionText(c: ConnectionCheck | undefined) {
 }
 
 /** Qué dice la última generación de este parche y qué hacer si falló. */
-function checkText(c: PatchCheck | undefined): { ok: boolean; short: string; help?: string } | null {
+function checkText(c: PatchCheck | undefined, points: ArPoint[]): { ok: boolean; short: string; help?: string } | null {
   if (!c) return null;
   const pct = `${Math.round(c.walkable * 100)}% caminable`;
   if (c.walkable < MIN_WALKABLE) {
@@ -50,6 +51,16 @@ function checkText(c: PatchCheck | undefined): { ok: boolean; short: string; hel
       help: 'Casi no quedó suelo: suele ser un parche muy angosto (menos de ~50 cm) o demasiado empinado (más de 60°). Hazlo más ancho o revisa la altura de los puntos.',
     };
   }
+  const ramp = rampInfo(points);
+  if (ramp && c.linkedSides?.length === points.length) {
+    const down = c.linkedSides[ramp.bottom], up = c.linkedSides[ramp.top];
+    if (down && up) return { ok: true, short: `${pct} · unida abajo y arriba` };
+    return {
+      ok: false,
+      short: `${pct} · ${!down && !up ? 'sin unir' : `no llega ${down ? 'arriba' : 'abajo'}`}`,
+      help: `El borde ${!down && !up ? 'de abajo ni el de arriba' : down ? 'de arriba' : 'de abajo'} (en rojo tras regenerar) no empalma con el piso: quedó lejos o a más de 30 cm de su altura. Redibújala con «Escalera» marcando el pie y el final sobre los pisos.`,
+    };
+  }
   if (c.links === 0) {
     return {
       ok: false,
@@ -57,19 +68,22 @@ function checkText(c: PatchCheck | undefined): { ok: boolean; short: string; hel
       help: 'Es caminable pero está aislado: ningún lado llega al piso escaneado. Monta sus bordes unos 30 cm sobre el piso de alrededor y que la diferencia de altura en la unión sea menor a 30 cm.',
     };
   }
-  if (c.links === 1) {
-    return {
-      ok: false,
-      short: `${pct} · unido solo por 1 lado`,
-      help: 'Si el parche une dos zonas (p. ej. una escalera), el otro extremo no empalma: su borde quedó más de 30 cm por encima o por debajo del piso. Pon esos puntos sobre el piso de llegada (no sobre el último peldaño).',
-    };
-  }
   return { ok: true, short: `${pct} · unido por ${c.links} de ${c.sides} lados` };
 }
 
+// Lo que pide cada clic de la escalera guiada
+const STAIRS_STEPS = [
+  'Clic en el piso de abajo, al pie del primer escalón, junto a un costado.',
+  'Ahora junto al otro costado, también al pie.',
+  'Clic en el piso de arriba, donde termina el último escalón, en un costado.',
+  'Y el otro costado arriba: la rampa se arma sola y se mete 30 cm en cada piso.',
+];
+
+const rampText = (r: RampInfo) => `sube ${r.rise.toFixed(1)} m · ${Math.round(r.slopeDeg)}°`;
+
 export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
   const { draft, patchDraft } = nav;
-  const draftCheck = patchDraft?.id ? checkText(nav.patchChecks[patchDraft.id]) : null;
+  const draftCheck = patchDraft?.id ? checkText(nav.patchChecks[patchDraft.id], patchDraft.points) : null;
 
   const status = nav.generated
     ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones${nav.generated.removed ? ` · ${nav.generated.removed} triángulos del escaneo ignorados sobre parches` : ''}`
@@ -143,26 +157,36 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
       {/* ── Parches de suelo ───────────────────────────────── */}
       <Box sx={{ p: 1.5, pb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Parches de suelo ({nav.patches.length})</Typography>
-        <Button size="small" startIcon={<AddRoundedIcon />} disabled={nav.drawingPatch} onClick={nav.startPatch}>Nuevo</Button>
+        <Stack direction="row">
+          <Tooltip title="Rampa sobre una escalera mal escaneada: 2 clics al pie y 2 arriba">
+            <span>
+              <Button size="small" startIcon={<StairsRoundedIcon />} disabled={nav.drawingPatch} onClick={nav.startStairs}>Escalera</Button>
+            </span>
+          </Tooltip>
+          <Button size="small" startIcon={<AddRoundedIcon />} disabled={nav.drawingPatch} onClick={nav.startPatch}>Nuevo</Button>
+        </Stack>
       </Box>
       <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
         Rellenan tramos que el escaneo no capturó y que la regeneración no cierra sola (las rendijas y huecos de hasta
-        ~1 m sí se rellenan solos). Marca el contorno del hueco con clics sobre el piso escaneado de
-        alrededor, montándolo unos 30 cm sobre él para que quede unido. Cada punto toma la altura del modelo, así
-        que en escaleras y rampas el parche queda inclinado. Shift+clic (o clic sobre el hueco) pone el punto a la
-        altura del anterior. Lo que el escaneo tenga encima del parche (hasta 1,8 m) se ignora. Tras regenerar, cada
-        parche muestra si quedó caminable y unido.
+        ~1 m sí se rellenan solos). Para una escalera usa «Escalera»: con 4 clics arma una rampa que toma la altura de
+        cada piso y entra 30 cm en ellos, así queda unida aunque el clic caiga en un peldaño. Para otro hueco, «Nuevo»:
+        marca su contorno con clics sobre el piso escaneado de alrededor, montándolo unos 30 cm sobre él. Cada punto
+        toma la altura del modelo; Shift+clic (o clic sobre el hueco) la del punto anterior. Lo que el escaneo tenga
+        encima del parche (hasta 1,8 m) se ignora. Tras regenerar, los bordes unidos al piso se ven en verde y los que
+        faltan de una escalera, en rojo.
       </Typography>
 
       {patchDraft && (
         <Box sx={{ m: 1.5, p: 1.5, border: 1, borderColor: 'warning.main', borderRadius: 2 }}>
           {nav.drawingPatch && (
             <Alert severity="info" sx={{ mb: 1, py: 0 }}>
-              {patchDraft.points.length === 0
-                ? 'Haz clic en el piso, en una esquina del hueco.'
-                : patchDraft.points.length < 3
-                  ? `Sigue el contorno: faltan ${3 - patchDraft.points.length} punto(s).`
-                  : 'Agrega más puntos o pulsa Terminar.'}
+              {nav.stairsMode
+                ? `${patchDraft.points.length + 1}/4 · ${STAIRS_STEPS[patchDraft.points.length]}`
+                : patchDraft.points.length === 0
+                  ? 'Haz clic en el piso, en una esquina del hueco.'
+                  : patchDraft.points.length < 3
+                    ? `Sigue el contorno: faltan ${3 - patchDraft.points.length} punto(s).`
+                    : 'Agrega más puntos o pulsa Terminar.'}
             </Alert>
           )}
           <TextField
@@ -171,8 +195,16 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
           />
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
             {patchDraft.points.length} puntos · {nav.patchDraftArea.toFixed(2)} m²
-            {patchDraft.points.length > 0 && ` · altura ${Math.min(...patchDraft.points.map(p => p.y)).toFixed(2)}–${Math.max(...patchDraft.points.map(p => p.y)).toFixed(2)} m`}
+            {nav.patchDraftRamp
+              ? ` · escalera o rampa: ${rampText(nav.patchDraftRamp)}`
+              : patchDraft.points.length > 0 && ` · altura ${Math.min(...patchDraft.points.map(p => p.y)).toFixed(2)}–${Math.max(...patchDraft.points.map(p => p.y)).toFixed(2)} m`}
           </Typography>
+          {nav.patchDraftRamp && nav.patchDraftRamp.slopeDeg > 45 && (
+            <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+              Muy empinada para una escalera: revisa que los puntos de arriba estén sobre el piso de arriba y los de abajo
+              sobre el de abajo.
+            </Alert>
+          )}
           {draftCheck && (
             <Alert severity={draftCheck.ok ? 'success' : 'warning'} sx={{ mt: 1, py: 0 }}>
               {draftCheck.short}{draftCheck.help && <><br />{draftCheck.help}</>}
@@ -183,10 +215,10 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
               Deshacer punto
             </Button>
             {nav.drawingPatch
-              ? <Button size="small" onClick={() => nav.setDrawingPatch(false)}>Terminar</Button>
+              ? <Button size="small" onClick={nav.finishDrawing}>Terminar</Button>
               : <Button size="small" onClick={() => nav.setDrawingPatch(true)}>Agregar puntos</Button>}
             {patchDraft.points.length > 0 && (
-              <Button size="small" onClick={() => { nav.setPatchDraft({ ...patchDraft, points: [] }); nav.setDrawingPatch(true); }}>
+              <Button size="small" onClick={nav.redrawPatch}>
                 Redibujar
               </Button>
             )}
@@ -205,12 +237,13 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
 
       <List dense sx={{ py: 0 }}>
         {nav.patches.map(p => {
-          const check = checkText(nav.patchChecks[p.id!]);
+          const check = checkText(nav.patchChecks[p.id!], p.points);
+          const ramp = rampInfo(p.points);
           return (
             <ListItemButton key={p.id} selected={p.id === nav.selectedPatchId} onClick={() => nav.selectPatch(p.id!)}>
               <ListItemText
                 primary={p.label}
-                secondary={`${p.points.length} puntos · ${patchArea(p.points).toFixed(1)} m²${check ? ` · ${check.short}` : ''}`}
+                secondary={`${ramp ? `escalera o rampa · ${rampText(ramp)}` : `${p.points.length} puntos · ${patchArea(p.points).toFixed(1)} m²`}${check ? ` · ${check.short}` : ''}`}
                 slotProps={{ secondary: { color: check && !check.ok ? 'warning.main' : 'text.secondary' } }}
               />
             </ListItemButton>
