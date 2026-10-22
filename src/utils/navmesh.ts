@@ -1,15 +1,18 @@
-import { init, importNavMesh, exportNavMesh, getNavMeshPositionsAndIndices, NavMeshQuery, type NavMesh } from 'recast-navigation';
-import { generateSoloNavMesh } from 'recast-navigation/generators';
+import { init, importNavMesh, exportNavMesh, getNavMeshPositionsAndIndices, Detour, NavMeshQuery, type NavMesh } from 'recast-navigation';
 import type { ArPoint } from '../types';
 import { encodeNavMeshInput } from './navmesh-input';
+import { generateNavMesh, type BuildReport } from './navmesh-builder';
 import { applyPatches, preparePatch, surfaceAt } from './navPatches';
 
-// Mismos valores por defecto que el NavigationMesh de Mattercraft (@zcomponent/three-navigation)
+/**
+ * Los de Mattercraft (@zcomponent/three-navigation) salvo la altura libre: 1,8 m en vez de 2 m, porque el dintel de
+ * una puerta (~2 m) escaneado con unos centímetros de ruido cerraba el paso.
+ */
 export const NAVMESH_SETTINGS = {
   cellSize: 0.1,
   cellHeight: 0.05,
   walkableClimb: 0.3,
-  walkableHeight: 2,
+  walkableHeight: 1.8,
   walkableRadius: 0.2,
   walkableSlopeAngle: 60,
   borderSize: 0,
@@ -45,6 +48,12 @@ export interface PatchCheck {
   /** Lados del parche por los que se llega caminando al suelo escaneado de alrededor. */
   links: number;
   sides: number;
+}
+
+/** Si cada extremo de la conexión quedó unido al navmesh (Detour busca suelo a menos de su radio). */
+export interface ConnectionCheck {
+  start: boolean;
+  end: boolean;
 }
 
 const SAMPLE_STEP = 0.2;
@@ -113,6 +122,26 @@ function checkPatches(navMesh: NavMesh, patches: { points: ArPoint[] }[]): Patch
 let ready: Promise<void> | null = null;
 export const initRecast = () => (ready ??= init());
 
+/** Las conexiones llevan como userId su posición en la lista; el vínculo de su polígono por el lado 0 es el inicio. */
+function checkConnections(navMesh: NavMesh, count: number): ConnectionCheck[] {
+  const out = Array.from({ length: count }, () => ({ start: false, end: false }));
+  for (let t = 0; t < navMesh.getMaxTiles(); t++) {
+    const tile = navMesh.getTile(t);
+    const header = tile.header();
+    if (!header) continue;
+    for (let i = 0; i < header.offMeshConCount(); i++) {
+      const con = tile.offMeshCons(i);
+      const check = out[con.userId()];
+      if (!check) continue;
+      for (let l = tile.polys(con.poly()).firstLink(); l !== Detour.DT_NULL_LINK; l = tile.links(l).next()) {
+        if (tile.links(l).edge() === 0) check.start = true;
+        else check.end = true;
+      }
+    }
+  }
+  return out;
+}
+
 function describeNavMesh(navMesh: NavMesh): NavMeshPreview {
   const [positions, indices] = getNavMeshPositionsAndIndices(navMesh);
   let offMeshConnections = 0;
@@ -162,36 +191,36 @@ export function navMeshInputFile(
   }, positions, indices);
 }
 
+export interface BuildResult {
+  data: Uint8Array;
+  preview: NavMeshPreview;
+  patchChecks: PatchCheck[];
+  connectionChecks: ConnectionCheck[];
+  removed: number;
+  report: BuildReport;
+}
+
 export async function buildNavMesh(
   scanPositions: Float32Array,
   scanIndices: Uint32Array,
   connections: OffMeshConnectionInput[],
   patches: { points: ArPoint[] }[] = [],
-): Promise<{ data: Uint8Array; preview: NavMeshPreview; patchChecks: PatchCheck[]; removed: number }> {
+): Promise<BuildResult> {
   await initRecast();
-  const s = NAVMESH_SETTINGS;
   const { positions, indices, removed } = recastGeometry(scanPositions, scanIndices, patches);
-  // Misma conversión a unidades de celda que hace Mattercraft en NavigationMesh.generate()
-  const result = generateSoloNavMesh(positions, indices, {
-    cs: s.cellSize,
-    ch: s.cellHeight,
-    walkableClimb: s.walkableClimb / s.cellHeight,
-    walkableRadius: s.walkableRadius / s.cellSize,
-    walkableSlopeAngle: s.walkableSlopeAngle,
-    walkableHeight: s.walkableHeight / s.cellHeight,
-    borderSize: s.borderSize / s.cellSize,
-    ...NAVMESH_DETAIL,
-    offMeshConnections: connections,
-  });
-  if (!result.success || !result.navMesh) throw new Error(result.error ?? 'No se pudo generar el navmesh');
+  const { navMesh, report } = generateNavMesh(
+    positions, indices, connections.map((c, userId) => ({ ...c, userId })), NAVMESH_SETTINGS, NAVMESH_DETAIL,
+  );
   try {
     return {
-      data: exportNavMesh(result.navMesh).slice(),
-      preview: describeNavMesh(result.navMesh),
-      patchChecks: checkPatches(result.navMesh, patches),
+      data: exportNavMesh(navMesh).slice(),
+      preview: describeNavMesh(navMesh),
+      patchChecks: checkPatches(navMesh, patches),
+      connectionChecks: checkConnections(navMesh, connections.length),
       removed,
+      report,
     };
   } finally {
-    result.navMesh.destroy();
+    navMesh.destroy();
   }
 }

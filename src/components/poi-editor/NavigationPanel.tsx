@@ -8,14 +8,36 @@ import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
 import type { ArPoint } from '../../types';
-import type { PatchCheck } from '../../utils/navmesh';
+import type { ConnectionCheck, PatchCheck } from '../../utils/navmesh';
+import type { BuildReport } from '../../utils/navmesh-builder';
 import { patchArea } from '../../utils/navPatches';
 import type { NavigationEditor } from './useNavigationEditor';
 
 const fmt = (p: ArPoint | null) => (p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}` : '—');
 const dist = (a: ArPoint, b: ArPoint) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+const m2 = (v: number) => `${v.toLocaleString('es', { maximumFractionDigits: 1 })} m²`;
 
 const MIN_WALKABLE = 0.6;
+
+/** Lo que el generador corrigió del escaneo, en una frase. */
+function repairText(r: BuildReport): string {
+  if (!r.repaired) return 'Sin reparaciones automáticas: el formato interno de recast no es el esperado.';
+  const parts = [
+    r.flipped && 'la malla venía con los suelos al revés',
+    r.gapsClosedM2 > 0 && `${m2(r.gapsClosedM2)} de rendijas y huecos angostos cerrados`,
+    r.holesFilled > 0 && `${r.holesFilled} hueco(s) rellenado(s) (${m2(r.holesFilledM2)})`,
+    r.invertedFloorM2 > 0 && `${m2(r.invertedFloorM2)} de suelo con la normal invertida recuperado`,
+    r.floaters.clusters > 0 && `${r.floaters.clusters} restos flotantes quitados`,
+    r.spikes > 0 && `${r.spikes} picos o postes delgados recortados`,
+    r.droppedTriangles > 0 && `${r.droppedTriangles} triángulos inválidos descartados`,
+  ].filter(Boolean);
+  return parts.length ? `Reparado: ${parts.join(', ')}.` : 'El escaneo no necesitó reparaciones.';
+}
+
+function connectionText(c: ConnectionCheck | undefined) {
+  if (!c || (c.start && c.end)) return null;
+  return !c.start && !c.end ? 'ningún extremo toca el navmesh' : `el ${c.start ? 'final' : 'inicio'} no toca el navmesh`;
+}
 
 /** Qué dice la última generación de este parche y qué hacer si falló. */
 function checkText(c: PatchCheck | undefined): { ok: boolean; short: string; help?: string } | null {
@@ -63,6 +85,22 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
       <Box sx={{ p: 1.5 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Navmesh (zonas caminables)</Typography>
         <Typography variant="caption" color="text.secondary">{status}</Typography>
+        {nav.generated && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            {repairText(nav.generated.report)}
+          </Typography>
+        )}
+        {nav.generated && nav.generated.report.openHoles.length > 0 && (
+          <Alert severity="info" sx={{ my: 1, py: 0 }}>
+            Huecos sin escanear demasiado grandes para rellenarlos solos; si son piso, cúbrelos con un parche:
+            {nav.generated.report.openHoles.slice(0, 5).map(h => (
+              <Box key={`${h.x},${h.z}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{m2(h.areaM2)} · {h.widthM.toLocaleString('es')} m de ancho</span>
+                <Button size="small" sx={{ minWidth: 0, py: 0 }} onClick={() => nav.focus({ x: h.x, y: h.y, z: h.z })}>Ver</Button>
+              </Box>
+            ))}
+          </Alert>
+        )}
         <FormControlLabel
           sx={{ display: 'flex', mt: 0.5 }}
           control={<Switch size="small" checked={nav.showNavMesh} onChange={e => nav.setShowNavMesh(e.target.checked)} />}
@@ -108,10 +146,11 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
         <Button size="small" startIcon={<AddRoundedIcon />} disabled={nav.drawingPatch} onClick={nav.startPatch}>Nuevo</Button>
       </Box>
       <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
-        Rellenan tramos que el escaneo no capturó. Marca el contorno del hueco con clics sobre el piso escaneado de
+        Rellenan tramos que el escaneo no capturó y que la regeneración no cierra sola (las rendijas y huecos de hasta
+        ~1 m sí se rellenan solos). Marca el contorno del hueco con clics sobre el piso escaneado de
         alrededor, montándolo unos 30 cm sobre él para que quede unido. Cada punto toma la altura del modelo, así
         que en escaleras y rampas el parche queda inclinado. Shift+clic (o clic sobre el hueco) pone el punto a la
-        altura del anterior. Lo que el escaneo tenga encima del parche (hasta 2 m) se ignora. Tras regenerar, cada
+        altura del anterior. Lo que el escaneo tenga encima del parche (hasta 1,8 m) se ignora. Tras regenerar, cada
         parche muestra si quedó caminable y unido.
       </Typography>
 
@@ -228,14 +267,18 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
       )}
 
       <List dense sx={{ py: 0 }}>
-        {nav.connections.map(c => (
-          <ListItemButton key={c.id} selected={c.id === nav.selectedId} onClick={() => nav.select(c.id!)}>
-            <ListItemText
-              primary={c.label}
-              secondary={`${c.group ? `${c.group} · ` : ''}${dist(c.start, c.end).toFixed(1)} m · Δy ${(c.end.y - c.start.y).toFixed(1)} m`}
-            />
-          </ListItemButton>
-        ))}
+        {nav.connections.map(c => {
+          const warning = connectionText(nav.connectionChecks[c.id!]);
+          return (
+            <ListItemButton key={c.id} selected={c.id === nav.selectedId} onClick={() => nav.select(c.id!)}>
+              <ListItemText
+                primary={c.label}
+                secondary={`${c.group ? `${c.group} · ` : ''}${dist(c.start, c.end).toFixed(1)} m · Δy ${(c.end.y - c.start.y).toFixed(1)} m${warning ? ` · ${warning}` : ''}`}
+                slotProps={{ secondary: { color: warning ? 'warning.main' : 'text.secondary' } }}
+              />
+            </ListItemButton>
+          );
+        })}
       </List>
     </Box>
   );

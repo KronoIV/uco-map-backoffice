@@ -436,9 +436,14 @@ class ViewerEngine {
         positions[(vo + i) * 3 + 2] = v.z;
       }
       const index = m.geometry.index;
-      if (index) for (let j = 0; j < index.count; j++) indices[io + j] = index.getX(j) + vo;
-      else for (let j = 0; j < pos.count; j++) indices[io + j] = vo + j;
-      io += index ? index.count : pos.count;
+      // Una transformación espejo invierte el sentido de los triángulos: recast vería los suelos hacia abajo
+      const mirrored = m.matrixWorld.determinant() < 0;
+      const count = index ? index.count : pos.count;
+      for (let j = 0; j < count; j++) {
+        const k = mirrored ? j - (j % 3) + (2 - (j % 3)) : j;
+        indices[io + j] = (index ? index.getX(k) : k) + vo;
+      }
+      io += count;
       vo += pos.count;
     }
     return { positions, indices, meshNames: [...this.loaded.keys()] };

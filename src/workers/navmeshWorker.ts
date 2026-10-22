@@ -23,10 +23,8 @@ ctx.onmessage = async e => {
       ctx.postMessage({ ok: true, file }, [file.buffer]);
       return;
     }
-    const { data, preview, patchChecks, removed } = await buildNavMesh(
-      e.data.positions, e.data.indices, e.data.connections, e.data.patches,
-    );
-    ctx.postMessage({ ok: true, data, preview, patchChecks, removed }, [data.buffer, preview.positions.buffer, preview.indices.buffer]);
+    const result = await buildNavMesh(e.data.positions, e.data.indices, e.data.connections, e.data.patches);
+    ctx.postMessage({ ok: true, ...result }, [result.data.buffer, result.preview.positions.buffer, result.preview.indices.buffer]);
   } catch (err) {
     ctx.postMessage({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
