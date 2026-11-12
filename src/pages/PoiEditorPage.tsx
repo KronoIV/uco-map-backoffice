@@ -61,6 +61,8 @@ export default function PoiEditorPage() {
     [roomsQ.data],
   );
   const selected = rooms.find(r => r.roomId === selectedId) ?? null;
+  // Edificios (categorías de los salones) para asignar cada ascensor al suyo
+  const buildings = useMemo(() => [...new Set(rooms.map(r => r.category))].sort(), [rooms]);
 
   const visibleMeshes = useMemo(
     () => (meshesQ.data ?? []).filter(m => !hiddenMaps.has(m.name)),
@@ -110,6 +112,9 @@ export default function PoiEditorPage() {
     } else if (id.startsWith('patch:')) {
       setTab('nav');
       nav.selectPatch(id.slice(6));
+    } else if (id.startsWith('elev:')) {
+      setTab('nav');
+      nav.selectElevator(id.slice(5));
     } else if (id.startsWith('room:')) {
       const room = rooms.find(r => r.roomId === id.slice(5));
       if (room) selectRoom(room);
@@ -153,7 +158,7 @@ export default function PoiEditorPage() {
             <Tab value="rooms" label="Lugares" sx={{ minHeight: 40 }} />
             <Tab value="nav" label="Navegación" sx={{ minHeight: 40 }} />
           </Tabs>
-          {tab === 'nav' ? <NavigationPanel nav={nav} /> : (<>
+          {tab === 'nav' ? <NavigationPanel nav={nav} buildings={buildings} /> : (<>
           <Box sx={{ p: 1.5 }}>
             <OutlinedInput
               size="small" fullWidth placeholder="Buscar lugar…" value={search}
@@ -277,6 +282,7 @@ export default function PoiEditorPage() {
               markers={markers}
               connections={nav.viewerConnections}
               patches={nav.viewerPatches}
+              elevators={nav.viewerElevators}
               navMesh={nav.viewerNavMesh}
               clipY={clipY}
               pickPlaneY={tab === 'nav' ? nav.pickPlaneY : null}
@@ -297,7 +303,9 @@ export default function PoiEditorPage() {
             {tab === 'nav'
               ? nav.drawingPatch
                 ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Shift+clic = a la altura del punto anterior · Retroceso deshace · Enter termina.'
-                : ' Verde = zona caminable; naranja = escaleras; azul = parches de suelo.'
+                : nav.pickingStops
+                  ? ' Clic sobre el piso frente a la puerta del ascensor, en cada piso · Enter termina.'
+                  : ' Verde = zona caminable; naranja = escaleras; azul = parches de suelo; morado = ascensores.'
               : selected ? ' Clic sobre el modelo para ubicar el punto.' : ' Selecciona un lugar para ubicar su punto.'}
           </Typography>
         </Paper>

@@ -38,6 +38,16 @@ export interface ViewerPatch {
   edges?: Array<'linked' | 'missing' | null>;
 }
 
+export interface ViewerElevator {
+  id: string;
+  label: string;
+  /** Una parada por piso, frente a la puerta. */
+  stops: { floor: number; point: ArPoint }[];
+  selected: boolean;
+  /** Se puede tocar para editarlo (no mientras se marca otra cosa). */
+  selectable: boolean;
+}
+
 export interface MapViewerApi {
   /** Triángulos de las mallas cargadas en el espacio del mapa (entrada para recast). */
   collectGeometry(): { positions: Float32Array; indices: Uint32Array; meshNames: string[] };
@@ -50,6 +60,7 @@ interface MapViewerProps {
   markers: ViewerMarker[];
   connections: ViewerConnection[];
   patches: ViewerPatch[];
+  elevators: ViewerElevator[];
   navMesh: NavMeshPreview | null;
   clipY: number | null;
   /** Altura del último punto: el clic cae ahí si no hay piso debajo, si toca una pared o con Shift. */
@@ -141,6 +152,7 @@ class ViewerEngine {
   readonly connRoot = new THREE.Group();
   readonly navRoot = new THREE.Group();
   readonly patchRoot = new THREE.Group();
+  readonly elevRoot = new THREE.Group();
   readonly clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), NO_CLIP);
   readonly loader: GLTFLoader;
   readonly draco: DRACOLoader;
@@ -174,6 +186,13 @@ class ViewerEngine {
     vertex: new THREE.MeshBasicMaterial({ color: 0xff6f00, depthTest: false, transparent: true }),
   };
   private readonly patchVertexGeo = new THREE.SphereGeometry(0.07, 10, 6);
+  private readonly elevMat = {
+    line: new THREE.LineBasicMaterial({ color: 0xab47bc, depthTest: false, transparent: true }),
+    lineSelected: new THREE.LineBasicMaterial({ color: 0x1e88e5, depthTest: false, transparent: true }),
+    stop: new THREE.MeshBasicMaterial({ color: 0xab47bc, depthTest: false, transparent: true }),
+    stopSelected: new THREE.MeshBasicMaterial({ color: 0x1e88e5, depthTest: false, transparent: true }),
+  };
+  private readonly elevStopGeo = new THREE.BoxGeometry(0.4, 0.06, 0.4);
   private readonly navMat = new THREE.MeshBasicMaterial({
     color: 0x00e676, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -198,7 +217,7 @@ class ViewerEngine {
     container.appendChild(this.labels.domElement);
 
     this.scene.background = new THREE.Color(0x1b1f24);
-    this.scene.add(this.meshRoot, this.navRoot, this.patchRoot, this.connRoot, this.markerRoot);
+    this.scene.add(this.meshRoot, this.navRoot, this.patchRoot, this.connRoot, this.elevRoot, this.markerRoot);
     this.navMat.clippingPlanes = [this.clipPlane];
     this.raycaster.params.Line = { threshold: 0.2 };
     this.camera.position.set(40, 50, 40);
@@ -425,6 +444,48 @@ class ViewerEngine {
     this.updateMarkerVisibility();
   }
 
+  setElevators(elevators: ViewerElevator[]) {
+    this.clearLabels(this.elevRoot);
+    for (const e of elevators) {
+      const markerId = e.selectable ? `elev:${e.id}` : undefined;
+      const stops = [...e.stops].sort((a, b) => a.point.y - b.point.y);
+      if (stops.length > 1) {
+        // El foso: une las puertas de abajo hacia arriba
+        const shaft = new THREE.Group();
+        shaft.userData = { minY: stops[0].point.y, keep: e.selected };
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(stops.map(s => new THREE.Vector3(s.point.x, s.point.y + 0.05, s.point.z))),
+          e.selected ? this.elevMat.lineSelected : this.elevMat.line,
+        );
+        line.renderOrder = 11;
+        line.userData.markerId = markerId;
+        shaft.add(line);
+        this.elevRoot.add(shaft);
+      }
+      for (const s of stops) {
+        const group = new THREE.Group();
+        group.position.set(s.point.x, s.point.y, s.point.z);
+        group.userData = { minY: s.point.y, keep: e.selected };
+        const pad = new THREE.Mesh(this.elevStopGeo, e.selected ? this.elevMat.stopSelected : this.elevMat.stop);
+        pad.position.y = 0.04;
+        pad.renderOrder = 11;
+        pad.userData.markerId = markerId;
+        group.add(pad);
+        const el = document.createElement('div');
+        el.textContent = e.selected ? `${e.label} · piso ${s.floor}` : `P${s.floor}`;
+        Object.assign(el.style, {
+          padding: '2px 6px', borderRadius: '6px', fontSize: '11px', fontWeight: '600',
+          color: '#fff', background: e.selected ? '#1e88e5cc' : '#ab47bccc', whiteSpace: 'nowrap',
+        });
+        const label = new CSS2DObject(el);
+        label.position.y = 0.45;
+        group.add(label);
+        this.elevRoot.add(group);
+      }
+    }
+    this.updateMarkerVisibility();
+  }
+
   collectGeometry() {
     this.meshRoot.updateMatrixWorld(true);
     const meshes: THREE.Mesh[] = [];
@@ -532,6 +593,9 @@ class ViewerEngine {
     for (const g of this.patchRoot.children) {
       g.visible = g.userData.keep || g.userData.minY <= limit + 0.5;
     }
+    for (const g of this.elevRoot.children) {
+      g.visible = g.userData.keep || g.userData.minY <= limit + 0.5;
+    }
   }
 
   focusOn(p: ArPoint) {
@@ -610,7 +674,7 @@ class ViewerEngine {
     this.raycaster.setFromCamera(ndc, this.camera);
 
     const markerHit = this.raycaster
-      .intersectObjects([...this.markerRoot.children, ...this.connRoot.children, ...this.patchRoot.children], true)
+      .intersectObjects([...this.markerRoot.children, ...this.connRoot.children, ...this.patchRoot.children, ...this.elevRoot.children], true)
       .find(h => h.object.userData.markerId && h.object.parent?.visible);
     if (markerHit) { this.props.onMarkerClick(markerHit.object.userData.markerId); return; }
 
@@ -656,6 +720,9 @@ class ViewerEngine {
     this.clearLabels(this.patchRoot);
     Object.values(this.patchMat).forEach(m => m.dispose());
     this.patchVertexGeo.dispose();
+    this.clearLabels(this.elevRoot);
+    Object.values(this.elevMat).forEach(m => m.dispose());
+    this.elevStopGeo.dispose();
     this.setNavMesh(null);
     this.navMat.dispose();
     this.clearLabels(this.connRoot);
@@ -692,6 +759,7 @@ export default function MapViewer(props: MapViewerProps) {
   useEffect(() => { engineRef.current?.setMarkers(props.markers); }, [props.markers]);
   useEffect(() => { engineRef.current?.setConnections(props.connections); }, [props.connections]);
   useEffect(() => { engineRef.current?.setPatches(props.patches); }, [props.patches]);
+  useEffect(() => { engineRef.current?.setElevators(props.elevators); }, [props.elevators]);
   useEffect(() => { engineRef.current?.setNavMesh(props.navMesh); }, [props.navMesh]);
   useEffect(() => { engineRef.current?.setClipY(props.clipY); }, [props.clipY]);
   useEffect(() => { if (props.focus) engineRef.current?.focusOn(props.focus); }, [props.focus]);

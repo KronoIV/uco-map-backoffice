@@ -1,5 +1,5 @@
 import api from './api';
-import type { NavConnection, NavMeshInfo, NavPatch } from '../types';
+import type { NavConnection, NavElevator, NavMeshInfo, NavPatch } from '../types';
 
 const BASE = '/api/navigation';
 
@@ -14,6 +14,11 @@ export const navigationService = {
   createPatch: (p: NavPatch) => api.post<NavPatch>(`${BASE}/patches`, p).then(r => r.data),
   updatePatch: (id: string, p: NavPatch) => api.put<NavPatch>(`${BASE}/patches/${id}`, p).then(r => r.data),
   deletePatch: (id: string) => api.delete(`${BASE}/patches/${id}`),
+
+  getElevators: () => api.get<NavElevator[]>(`${BASE}/elevators`).then(r => r.data),
+  createElevator: (e: NavElevator) => api.post<NavElevator>(`${BASE}/elevators`, e).then(r => r.data),
+  updateElevator: (id: string, e: NavElevator) => api.put<NavElevator>(`${BASE}/elevators/${id}`, e).then(r => r.data),
+  deleteElevator: (id: string) => api.delete(`${BASE}/elevators/${id}`),
 
   getNavMeshInfo: () => api.get<NavMeshInfo | null>(`${BASE}/navmesh/info`).then(r => r.data),
 

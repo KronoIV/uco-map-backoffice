@@ -5,8 +5,9 @@ import { resolveApiError } from '../../services/api';
 import { readNavMesh, type BuildResult, type ConnectionCheck, type NavMeshPreview, type PatchCheck } from '../../utils/navmesh';
 import type { BuildReport } from '../../utils/navmesh-builder';
 import { patchArea, rampInfo, stairsRamp } from '../../utils/navPatches';
-import type { ArPoint, NavConnection, NavPatch } from '../../types';
-import type { MapViewerApi, ViewerConnection, ViewerPatch } from './MapViewer';
+import { addElevatorStop, elevatorProblem, type DraftStop } from '../../utils/elevators';
+import type { ArPoint, NavConnection, NavElevator, NavPatch } from '../../types';
+import type { MapViewerApi, ViewerConnection, ViewerElevator, ViewerPatch } from './MapViewer';
 
 export interface DraftConnection {
   id?: string;
@@ -24,6 +25,13 @@ export interface DraftPatch {
   id?: string;
   label: string;
   points: ArPoint[];
+}
+
+export interface DraftElevator {
+  id?: string;
+  label: string;
+  building: string;
+  stops: DraftStop[];
 }
 
 const centroid = (pts: ArPoint[]): ArPoint => ({
@@ -47,6 +55,7 @@ export function useNavigationEditor(
   const qc = useQueryClient();
   const connectionsQ = useQuery({ queryKey: ['nav-connections'], queryFn: navigationService.getConnections });
   const patchesQ = useQuery({ queryKey: ['nav-patches'], queryFn: navigationService.getPatches });
+  const elevatorsQ = useQuery({ queryKey: ['nav-elevators'], queryFn: navigationService.getElevators });
   const infoQ = useQuery({ queryKey: ['navmesh-info'], queryFn: navigationService.getNavMeshInfo });
   const currentQ = useQuery({
     queryKey: ['navmesh-current', infoQ.data?.updatedAt ?? 'none'],
@@ -75,9 +84,14 @@ export function useNavigationEditor(
   // Resultado de la última generación por id de parche; un parche editado después ya no lo tiene
   const [patchChecks, setPatchChecks] = useState<Record<string, PatchCheck>>({});
   const [connectionChecks, setConnectionChecks] = useState<Record<string, ConnectionCheck>>({});
+  // Ascensor en edición: cada clic en el modelo marca (o mueve) la parada de un piso frente a su puerta
+  const [elevatorDraft, setElevatorDraft] = useState<DraftElevator | null>(null);
+  const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(null);
+  const [pickingStops, setPickingStops] = useState(false);
 
   const connections = useMemo(() => connectionsQ.data ?? [], [connectionsQ.data]);
   const patches = useMemo(() => patchesQ.data ?? [], [patchesQ.data]);
+  const elevators = useMemo(() => elevatorsQ.data ?? [], [elevatorsQ.data]);
 
   const invalidateConnections = () => {
     qc.invalidateQueries({ queryKey: ['nav-connections'] });
@@ -135,6 +149,78 @@ export function useNavigationEditor(
     onError: err => setError(resolveApiError(err)),
   });
 
+  // Los ascensores no entran al navmesh: guardarlos no pide regenerarlo, la app los usa de inmediato
+  const saveElevatorMut = useMutation({
+    mutationFn: (e: NavElevator) => (e.id ? navigationService.updateElevator(e.id, e) : navigationService.createElevator(e)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['nav-elevators'] }); cancelElevator(); },
+    onError: err => setError(resolveApiError(err)),
+  });
+
+  const deleteElevatorMut = useMutation({
+    mutationFn: (id: string) => navigationService.deleteElevator(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['nav-elevators'] }); cancelElevator(); },
+    onError: err => setError(resolveApiError(err)),
+  });
+
+  function cancelElevator() {
+    setElevatorDraft(null);
+    setSelectedElevatorId(null);
+    setPickingStops(false);
+  }
+
+  function startElevator() {
+    cancel();
+    cancelPatch();
+    setSelectedElevatorId(null);
+    setElevatorDraft({ label: `Ascensor ${elevators.length + 1}`, building: '', stops: [] });
+    setPickingStops(true);
+  }
+
+  function selectElevator(id: string) {
+    const e = elevators.find(x => x.id === id);
+    if (!e) return;
+    cancel();
+    cancelPatch();
+    setSelectedElevatorId(id);
+    setElevatorDraft({
+      id: e.id,
+      label: e.label,
+      building: e.building ?? '',
+      stops: e.stops.map(s => ({ floor: s.floor, button: s.button ?? '', point: s.point })).sort((a, b) => a.point.y - b.point.y),
+    });
+    setPickingStops(false);
+    onFocus(centroid(e.stops.map(s => s.point)));
+  }
+
+  function updateStop(index: number, change: Partial<DraftStop>) {
+    setElevatorDraft(d => (d ? { ...d, stops: d.stops.map((s, i) => (i === index ? { ...s, ...change } : s)) } : d));
+  }
+
+  function removeStop(index: number) {
+    setElevatorDraft(d => (d ? { ...d, stops: d.stops.filter((_, i) => i !== index) } : d));
+  }
+
+  function saveElevator() {
+    if (!elevatorDraft || elevatorProblem(elevatorDraft.stops)) return;
+    saveElevatorMut.mutate({
+      ...(elevatorDraft.id ? { id: elevatorDraft.id } : {}),
+      label: elevatorDraft.label.trim() || 'Ascensor',
+      building: elevatorDraft.building.trim() || null,
+      stops: elevatorDraft.stops.map(s => ({ floor: s.floor, button: s.button.trim() || null, point: s.point })),
+    });
+  }
+
+  // Marcando paradas: Escape o Enter terminan
+  useEffect(() => {
+    if (!pickingStops) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Escape' || e.key === 'Enter') setPickingStops(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pickingStops]);
+
   function cancelPatch() {
     setPatchDraft(null);
     setSelectedPatchId(null);
@@ -144,6 +230,7 @@ export function useNavigationEditor(
 
   function startPatch() {
     cancel();
+    cancelElevator();
     setSelectedPatchId(null);
     setPatchDraft({ label: `Parche ${patches.length + 1}`, points: [] });
     setDrawingPatch(true);
@@ -152,6 +239,7 @@ export function useNavigationEditor(
 
   function startStairs() {
     cancel();
+    cancelElevator();
     setSelectedPatchId(null);
     setPatchDraft({ label: `Escalera ${patches.filter(p => rampInfo(p.points)).length + 1}`, points: [] });
     setDrawingPatch(true);
@@ -162,6 +250,7 @@ export function useNavigationEditor(
     const p = patches.find(x => x.id === id);
     if (!p) return;
     cancel();
+    cancelElevator();
     setSelectedPatchId(id);
     setPatchDraft({ id: p.id, label: p.label, points: p.points });
     setDrawingPatch(false);
@@ -213,6 +302,7 @@ export function useNavigationEditor(
 
   function startNew() {
     cancelPatch();
+    cancelElevator();
     setSelectedId(null);
     setDraft({ label: `Escalera ${connections.length + 1}`, group: '', start: null, end: null, radius: 1, bidirectional: true });
     setPickTarget('start');
@@ -222,6 +312,7 @@ export function useNavigationEditor(
     const c = connections.find(x => x.id === id);
     if (!c) return;
     cancelPatch();
+    cancelElevator();
     setSelectedId(id);
     setDraft({ ...c, group: c.group ?? '' });
     setPickTarget(null);
@@ -230,6 +321,13 @@ export function useNavigationEditor(
 
   /** Devuelve true si el clic se us\u00f3 para la conexi\u00f3n en edici\u00f3n. */
   function handlePick(p: ArPoint): boolean {
+    if (elevatorDraft && pickingStops) {
+      // La parada va sobre el piso: un clic sobre basura del escaneo baja al piso que haya debajo
+      const floorY = getViewer()?.floorAt(p.x, p.z, p.y) ?? null;
+      const point = floorY === null ? p : { ...p, y: Math.round(floorY * 1000) / 1000 };
+      setElevatorDraft({ ...elevatorDraft, stops: addElevatorStop(elevatorDraft.stops, point) });
+      return true;
+    }
     if (patchDraft && drawingPatch) {
       const points = [...patchDraft.points, p];
       if (stairsMode && points.length === 4) {
@@ -350,12 +448,12 @@ export function useNavigationEditor(
   const viewerConnections = useMemo<ViewerConnection[]>(() => {
     const list: ViewerConnection[] = connections
       .filter(c => c.id !== selectedId)
-      .map(c => ({ id: c.id!, label: c.label, start: c.start, end: c.end, selected: false, selectable: !drawingPatch && !pickTarget }));
+      .map(c => ({ id: c.id!, label: c.label, start: c.start, end: c.end, selected: false, selectable: !drawingPatch && !pickTarget && !pickingStops }));
     if (draft?.start) {
       list.push({ id: draft.id ?? 'draft', label: draft.label, start: draft.start, end: draft.end, selected: true, selectable: false });
     }
     return list;
-  }, [connections, selectedId, draft, drawingPatch, pickTarget]);
+  }, [connections, selectedId, draft, drawingPatch, pickTarget, pickingStops]);
 
   const viewerPatches = useMemo<ViewerPatch[]>(() => {
     const list: ViewerPatch[] = patches
@@ -367,13 +465,23 @@ export function useNavigationEditor(
         const edges = check?.linkedSides?.length === p.points.length
           ? check.linkedSides.map((linked, i) => (linked ? 'linked' : ramp && (i === ramp.bottom || i === ramp.top) ? 'missing' : null))
           : undefined;
-        return { id: p.id!, label: p.label, points: p.points, selected: false, selectable: !drawingPatch && !pickTarget, edges };
+        return { id: p.id!, label: p.label, points: p.points, selected: false, selectable: !drawingPatch && !pickTarget && !pickingStops, edges };
       });
     if (patchDraft?.points.length) {
       list.push({ id: patchDraft.id ?? 'draft', label: patchDraft.label, points: patchDraft.points, selected: true, selectable: false });
     }
     return list;
-  }, [patches, selectedPatchId, patchDraft, drawingPatch, pickTarget, patchChecks]);
+  }, [patches, selectedPatchId, patchDraft, drawingPatch, pickTarget, pickingStops, patchChecks]);
+
+  const viewerElevators = useMemo<ViewerElevator[]>(() => {
+    const list: ViewerElevator[] = elevators
+      .filter(e => e.id !== selectedElevatorId)
+      .map(e => ({ id: e.id!, label: e.label, stops: e.stops, selected: false, selectable: !drawingPatch && !pickTarget && !pickingStops }));
+    if (elevatorDraft?.stops.length) {
+      list.push({ id: elevatorDraft.id ?? 'draft', label: elevatorDraft.label, stops: elevatorDraft.stops, selected: true, selectable: false });
+    }
+    return list;
+  }, [elevators, selectedElevatorId, elevatorDraft, drawingPatch, pickTarget, pickingStops]);
 
   // Cada punto toma la altura del modelo (rampas, escaleras); sobre el hueco, la del punto anterior. En la escalera
   // guiada el tercer clic va al piso de arriba: no hereda la altura del pie
@@ -442,6 +550,23 @@ export function useNavigationEditor(
     viewerPatches,
     pickPlaneY,
     viewerNavMesh: showNavMesh ? shownPreview : null,
+    elevators,
+    elevatorsLoading: elevatorsQ.isLoading,
+    elevatorDraft,
+    setElevatorDraft,
+    elevatorProblem: elevatorDraft ? elevatorProblem(elevatorDraft.stops) : null,
+    selectedElevatorId,
+    pickingStops,
+    setPickingStops,
+    startElevator,
+    selectElevator,
+    cancelElevator,
+    updateStop,
+    removeStop,
+    saveElevator,
+    savingElevator: saveElevatorMut.isPending,
+    removeElevator: (id: string) => deleteElevatorMut.mutate(id),
+    viewerElevators,
   };
 }
 

@@ -1,17 +1,21 @@
 import {
-  Alert, Box, Button, Divider, FormControlLabel, LinearProgress, List, ListItemButton, ListItemText,
+  Alert, Autocomplete, Box, Button, Divider, FormControlLabel, IconButton, LinearProgress, List, ListItemButton, ListItemText,
   Stack, Switch, TextField, Tooltip, Typography,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import AddLocationAltRoundedIcon from '@mui/icons-material/AddLocationAltRounded';
 import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import ElevatorRoundedIcon from '@mui/icons-material/ElevatorRounded';
 import StairsRoundedIcon from '@mui/icons-material/StairsRounded';
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded';
 import type { ArPoint } from '../../types';
 import type { ConnectionCheck, PatchCheck } from '../../utils/navmesh';
 import type { BuildReport } from '../../utils/navmesh-builder';
 import { patchArea, rampInfo, type RampInfo } from '../../utils/navPatches';
+import { MAX_BUTTON_LENGTH } from '../../utils/elevators';
 import type { NavigationEditor } from './useNavigationEditor';
 
 const fmt = (p: ArPoint | null) => (p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}` : '—');
@@ -81,8 +85,9 @@ const STAIRS_STEPS = [
 
 const rampText = (r: RampInfo) => `sube ${r.rise.toFixed(1)} m · ${Math.round(r.slopeDeg)}°`;
 
-export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
-  const { draft, patchDraft } = nav;
+/** `buildings`: categorías de los salones, para asignar cada ascensor a su edificio. */
+export default function NavigationPanel({ nav, buildings = [] }: { nav: NavigationEditor; buildings?: string[] }) {
+  const { draft, patchDraft, elevatorDraft } = nav;
   const draftCheck = patchDraft?.id ? checkText(nav.patchChecks[patchDraft.id], patchDraft.points) : null;
 
   const status = nav.generated
@@ -312,6 +317,98 @@ export default function NavigationPanel({ nav }: { nav: NavigationEditor }) {
             </ListItemButton>
           );
         })}
+      </List>
+
+      <Divider />
+
+      {/* ── Ascensores ──────────────────────────────────────── */}
+      <Box sx={{ p: 1.5, pb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Ascensores ({nav.elevators.length})</Typography>
+        <Button size="small" startIcon={<ElevatorRoundedIcon />} disabled={nav.pickingStops} onClick={nav.startElevator}>Nuevo</Button>
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
+        Su interior no está escaneado: la app guía hasta la puerta, dice qué botón presionar y vuelve a ubicar al usuario
+        cuando sale. Marca con un clic el piso frente a la puerta del ascensor en cada piso (usa el corte de altura). El
+        número de piso debe ser el mismo de los salones. No hace falta regenerar el navmesh.
+      </Typography>
+
+      {elevatorDraft && (
+        <Box sx={{ m: 1.5, p: 1.5, border: 1, borderColor: 'secondary.main', borderRadius: 2 }}>
+          {nav.pickingStops && (
+            <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+              {elevatorDraft.stops.length === 0
+                ? 'Clic en el piso, frente a la puerta del ascensor, en cualquiera de sus pisos.'
+                : `Ahora frente a la puerta en otro piso (${elevatorDraft.stops.length} marcados). Un clic en un piso ya marcado mueve su punto · Enter termina.`}
+            </Alert>
+          )}
+          <Stack direction="row" spacing={1}>
+            <TextField
+              size="small" label="Nombre" value={elevatorDraft.label} sx={{ flex: 1 }}
+              onChange={e => nav.setElevatorDraft({ ...elevatorDraft, label: e.target.value })}
+            />
+            <Autocomplete
+              freeSolo size="small" options={buildings} inputValue={elevatorDraft.building} sx={{ width: 120 }}
+              onInputChange={(_, v) => nav.setElevatorDraft({ ...elevatorDraft, building: v })}
+              renderInput={params => <TextField {...params} label="Edificio" />}
+            />
+          </Stack>
+          <Stack spacing={0.75} sx={{ mt: 1.25 }}>
+            {/* De arriba hacia abajo, como se ven los pisos */}
+            {elevatorDraft.stops.map((s, i) => ({ s, i })).reverse().map(({ s, i }) => (
+              <Stack key={`${i}:${s.point.y}`} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <TextField
+                  size="small" type="number" label="Piso" value={s.floor} sx={{ width: 76 }}
+                  onChange={e => {
+                    const v = Number(e.target.value);
+                    if (Number.isInteger(v)) nav.updateStop(i, { floor: v });
+                  }}
+                  slotProps={{ htmlInput: { step: 1 } }}
+                />
+                <TextField
+                  size="small" label="Botón" placeholder={String(s.floor)} value={s.button} sx={{ width: 76 }}
+                  onChange={e => nav.updateStop(i, { button: e.target.value })}
+                  slotProps={{ htmlInput: { maxLength: MAX_BUTTON_LENGTH } }}
+                />
+                <Tooltip title="Altura del punto: centra la vista en él">
+                  <Button size="small" color="inherit" sx={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', fontWeight: 400 }} onClick={() => nav.focus(s.point)}>
+                    {s.point.y.toFixed(2)} m
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Quitar este piso">
+                  <IconButton size="small" onClick={() => nav.removeStop(i)}><DeleteOutlineRoundedIcon fontSize="small" /></IconButton>
+                </Tooltip>
+              </Stack>
+            ))}
+          </Stack>
+          {nav.elevatorProblem && elevatorDraft.stops.length > 0 && (
+            <Alert severity="warning" sx={{ mt: 1, py: 0 }}>{nav.elevatorProblem}</Alert>
+          )}
+          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+            {nav.pickingStops
+              ? <Button size="small" onClick={() => nav.setPickingStops(false)}>Terminar</Button>
+              : <Button size="small" startIcon={<AddLocationAltRoundedIcon />} onClick={() => nav.setPickingStops(true)}>Marcar pisos</Button>}
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+            <Button size="small" variant="contained" disabled={!!nav.elevatorProblem || nav.savingElevator} onClick={nav.saveElevator}>
+              Guardar
+            </Button>
+            <Button size="small" onClick={nav.cancelElevator}>Cancelar</Button>
+            {elevatorDraft.id && (
+              <Button size="small" color="error" onClick={() => nav.removeElevator(elevatorDraft.id!)}>Eliminar</Button>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+      <List dense sx={{ py: 0 }}>
+        {nav.elevators.map(e => (
+          <ListItemButton key={e.id} selected={e.id === nav.selectedElevatorId} onClick={() => nav.selectElevator(e.id!)}>
+            <ListItemText
+              primary={e.label}
+              secondary={`${e.building ? `${e.building} · ` : ''}pisos ${e.stops.map(s => s.button || s.floor).join(', ')}`}
+            />
+          </ListItemButton>
+        ))}
       </List>
     </Box>
   );

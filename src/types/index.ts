@@ -128,6 +128,27 @@ export interface NavPatch {
   points: ArPoint[];
 }
 
+/** Parada de un ascensor: el punto sobre el piso, frente a su puerta. */
+export interface ElevatorStop {
+  /** Misma numeración que el piso de los salones (negativo = sótano). */
+  floor: number;
+  /** Texto del botón en la cabina si no es el número del piso (PB, S1…). */
+  button?: string | null;
+  point: ArPoint;
+}
+
+/**
+ * Ascensor: su interior no está escaneado y no entra al navmesh. La app guía hasta su puerta, dice qué botón presionar
+ * y vuelve a ubicar al usuario cuando sale.
+ */
+export interface NavElevator {
+  id?: string;
+  label: string;
+  /** Categoría de los salones del edificio (M, CO…); vacío = cualquier destino cercano. */
+  building?: string | null;
+  stops: ElevatorStop[];
+}
+
 export interface NavMeshInfo {
   updatedAt: string;
   updatedBy: string;
