@@ -9,6 +9,8 @@ export interface RoutingNode {
     gps: LatLng;
     nodeType?: string;
     label?: string;
+    /** Solo DOOR: piso por el que se entra al edificio (negativo = sótano); sin definir si falta. */
+    floor?: number | null;
 }
 
 interface Adjacency { node: string; dist: number; }
@@ -379,16 +381,27 @@ export function routeToNode(graph: RoutingGraph, lat: number, lng: number, desti
     return { nodeIds, totalDist, cost: result.cost, startVia: first.via, direct: false };
 }
 
-/** Nodos DOOR conectados al edificio; si aún no tiene puertas marcadas, el propio nodo del edificio. */
-export function doorIdsOf(graph: RoutingGraph, buildingId: string): string[] {
+/**
+ * Nodos DOOR conectados al edificio; si aún no tiene puertas marcadas, el propio nodo del edificio. Con el piso del
+ * destino, solo las puertas de ese piso o, si ninguna lo es, las del piso más cercano: entrar por otro piso obliga a
+ * buscar escaleras o ascensor adentro. Las puertas sin piso cuentan solo si ninguna del edificio lo tiene.
+ */
+export function doorIdsOf(graph: RoutingGraph, buildingId: string, floor: number | null = null): string[] {
     const doors = (graph.adj.get(buildingId) || []).map(a => a.node).filter(id => nodeTypeOf(graph, id) === 'DOOR');
-    return doors.length > 0 ? doors : [buildingId];
+    if (doors.length === 0) return [buildingId];
+    if (floor === null || !Number.isFinite(floor)) return doors;
+    const gap = (id: string) => {
+        const f = graph.nodes.get(id)?.floor;
+        return typeof f === 'number' && Number.isFinite(f) ? Math.abs(f - floor) : Infinity;
+    };
+    const best = Math.min(...doors.map(gap));
+    return best === Infinity ? doors : doors.filter(id => gap(id) === best);
 }
 
-/** La ruta a un edificio termina en su puerta más conveniente, no en el centro del edificio. */
-export function routeToBuilding(graph: RoutingGraph, lat: number, lng: number, buildingId: string): PlannedRoute | null {
+/** La ruta a un edificio termina en su puerta más conveniente (del piso del destino, si se conoce), no en su centro. */
+export function routeToBuilding(graph: RoutingGraph, lat: number, lng: number, buildingId: string, floor: number | null = null): PlannedRoute | null {
     let best: PlannedRoute | null = null;
-    for (const id of doorIdsOf(graph, buildingId)) {
+    for (const id of doorIdsOf(graph, buildingId, floor)) {
         const r = routeToNode(graph, lat, lng, id);
         if (r && (!best || r.cost < best.cost)) best = r;
     }

@@ -165,13 +165,13 @@ function FloorField({ node, disabled, onChange }: { node: GraphNode; disabled: b
       key={`${node.nodeId}-${node.floor ?? ''}`}
       size="small"
       type="number"
-      label={door ? 'Piso de esta salida' : 'Piso'}
+      label={door ? 'Piso de esta puerta' : 'Piso'}
       defaultValue={node.floor ?? ''}
       disabled={disabled}
       error={error}
       helperText={error
         ? `Un número entero entre ${MIN_FLOOR} y ${MAX_FLOOR}`
-        : door ? 'Por qué piso se sale a la calle. Negativo = sótano.' : 'Dónde buscarlo dentro del edificio. Negativo = sótano.'}
+        : door ? 'Piso al que da. La ruta a un lugar de ese piso entra por aquí. Negativo = sótano.' : 'Dónde buscarlo dentro del edificio. Negativo = sótano.'}
       slotProps={{ htmlInput: { min: MIN_FLOOR, max: MAX_FLOOR, step: 1 } }}
       onBlur={e => save(e.target.value)}
       onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
@@ -686,11 +686,12 @@ function UserNavPreview({
 
   // Mismo grafo que carga la app (solo activos con GPS) y mismo algoritmo (utils/campus-routing.ts)
   const graph = useMemo(() => buildRoutingGraph(
-    nodes.filter(n => n.active !== false && n.gps).map(n => ({ id: n.nodeId, gps: n.gps, label: n.label, nodeType: n.nodeType })),
+    nodes.filter(n => n.active !== false && n.gps).map(n => ({ id: n.nodeId, gps: n.gps, label: n.label, nodeType: n.nodeType, floor: n.floor })),
     edges.filter(e => e.active !== false).map(e => [e.nodeA, e.nodeB] as [string, string]),
   ), [nodes, edges]);
 
-  // A un edificio la app llega por su puerta más conveniente; a un POI dentro de un edificio, a ese edificio
+  // A un edificio la app llega por su puerta más conveniente; a un POI dentro de un edificio, a ese edificio por una
+  // puerta del piso del POI (o del más cercano)
   const route = useMemo(() => {
     if (!destNodeId || !simPos) return null;
     const dest = nodes.find(n => n.nodeId === destNodeId);
@@ -698,7 +699,7 @@ function UserNavPreview({
       ? buildings.find(b => b.buildingId === dest.buildingId) : undefined;
     const target = parent ? (parent.nodeId || parent.buildingId) : destNodeId;
     return nodeTypeOf(graph, target) === 'BUILDING'
-      ? routeToBuilding(graph, simPos.lat, simPos.lng, target)
+      ? routeToBuilding(graph, simPos.lat, simPos.lng, target, parent ? dest?.floor ?? null : null)
       : routeToNode(graph, simPos.lat, simPos.lng, target);
   }, [graph, destNodeId, simPos, nodes, buildings]);
 
