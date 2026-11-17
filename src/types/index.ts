@@ -103,6 +103,38 @@ export interface MapMesh {
   rotation: { qx: number; qy: number; qz: number; qw: number };
 }
 
+export type MultiSetPlan = 'FREE' | 'LITE' | 'PLUS' | 'CUSTOM';
+
+/** Estimación del cupo de MultiSet hecha por el backend sin llamar a MultiSet. */
+export interface MultiSetUsage {
+  plan: MultiSetPlan;
+  limit: number;
+  monthly: boolean;
+  resetDay: number;
+  autoDisablePercent: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  used: number;
+  percent: number;
+  baselineUsed: number | null;
+  baselineAt: string | null;
+  appCalls: number;
+  backendCalls: number;
+  arEnabled: boolean;
+  autoDisabledAt: string | null;
+  level: 'unconfigured' | 'ok' | 'warning' | 'critical' | 'disabled';
+}
+
+export interface MultiSetUsageRequest {
+  plan: MultiSetPlan;
+  limit: number;
+  monthly: boolean;
+  resetDay: number;
+  autoDisablePercent: number;
+  /** Uso que muestra ahora el portal; null = mantener el anterior. */
+  portalUsed: number | null;
+}
+
 // ──────────────── Navegación (navmesh) ─────────────────────────
 /** Enlace entre dos zonas del navmesh sin suelo continuo (escaleras). */
 export interface NavConnection {

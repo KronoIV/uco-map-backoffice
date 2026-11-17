@@ -6,6 +6,7 @@ import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ReportProblemRoundedIcon from '@mui/icons-material/ReportProblemRounded';
 import PageHeader from '../../components/PageHeader';
+import { MultiSetUsageAlert } from '../../components/MultiSetUsageCard';
 import PeriodFilter from '../../components/analytics/PeriodFilter';
 import KpiCard from '../../components/analytics/KpiCard';
 import ChartCard, { EmptyState, cardSx } from '../../components/analytics/ChartCard';
@@ -88,6 +89,8 @@ export default function AnalyticsDashboard() {
           </Tooltip>
         }
       />
+
+      <MultiSetUsageAlert />
 
       <PeriodFilter period={period} fetching={overview.isFetching || trips.isFetching} />
 
