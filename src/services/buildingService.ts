@@ -1,5 +1,5 @@
 import api from './api';
-import type { Building, MapConfig, PoiClip } from '../types';
+import type { Building, PoiClip } from '../types';
 
 export const buildingService = {
   getAll: () => api.get<Building[]>('/api/buildings').then(r => r.data),
@@ -8,10 +8,6 @@ export const buildingService = {
   update: (id: string, data: Partial<Building>) =>
     api.put<Building>(`/api/buildings/${id}`, data).then(r => r.data),
   delete: (id: string) => api.delete(`/api/buildings/${id}`),
-
-  getMapConfig: () => api.get<MapConfig>('/api/map/config').then(r => r.data),
-  updateMapConfig: (data: Partial<MapConfig>) =>
-    api.put<MapConfig>('/api/map/config', data).then(r => r.data),
 
   getClips: () => api.get<PoiClip[]>('/api/poi-clips').then(r => r.data),
   createClip: (data: Partial<PoiClip>) => api.post<PoiClip>('/api/poi-clips', data).then(r => r.data),

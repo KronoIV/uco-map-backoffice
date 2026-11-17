@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Box, Button, Paper, Typography, TextField, Alert, Skeleton, Divider, Chip,
+  Box, Button, Paper, Typography, TextField, Skeleton, Divider, Chip,
   Switch, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, InputLabel, Select, MenuItem, Tooltip, IconButton, Snackbar,
   Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
@@ -11,10 +10,9 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import { useForm, Controller } from 'react-hook-form';
 import PageHeader from '../components/PageHeader';
-import { buildingService } from '../services/buildingService';
 import { useSettings, useUpdateSetting, useCreateSetting, useDeleteSetting } from '../hooks/useSettings';
 import { resolveApiError } from '../services/api';
-import type { MapConfig, AppSetting, SettingType } from '../types';
+import type { AppSetting, SettingType } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,8 +59,6 @@ interface SettingFormValues {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const qc = useQueryClient();
-
   // ── Feature Flags ─────────────────────────────────────────────────────────
   const { data: settings = [], isLoading: settingsLoading } = useSettings();
   const updateSetting = useUpdateSetting();
@@ -132,28 +128,6 @@ export default function SettingsPage() {
       onError: (err) => setSnackbar(resolveApiError(err)),
     });
   }
-
-  // ── MapConfig ─────────────────────────────────────────────────────────────
-  const { data: config, isLoading: configLoading } = useQuery({
-    queryKey: ['mapConfig'],
-    queryFn: () => buildingService.getMapConfig(),
-    retry: false,
-  });
-
-  const { control, handleSubmit, formState: { errors } } = useForm<{ zoomThreshold: number }>({
-    defaultValues: { zoomThreshold: config?.zoomThreshold ?? 18 },
-    values: { zoomThreshold: config?.zoomThreshold ?? 18 },
-  });
-
-  const updateConfig = useMutation({
-    mutationFn: (data: Partial<MapConfig>) => buildingService.updateMapConfig(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['mapConfig'] }),
-    onError: (err) => setSnackbar(resolveApiError(err)),
-  });
-
-  const onSubmitConfig = (data: { zoomThreshold: number }) => {
-    updateConfig.mutate({ ...config, zoomThreshold: Number(data.zoomThreshold) });
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -251,67 +225,6 @@ export default function SettingsPage() {
                 </TableBody>
               </Table>
             </TableContainer>
-          )}
-        </Paper>
-
-        {/* ── Map Config ─────────────────────────────────────────────────── */}
-        <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', p: 3 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
-            Configuración del mapa
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-            Ajusta los parámetros globales del mapa de navegación.
-          </Typography>
-          <Divider sx={{ mb: 2 }} />
-
-          {configLoading ? (
-            <Skeleton variant="rounded" height={80} />
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Controller
-                name="zoomThreshold"
-                control={control}
-                rules={{ required: 'Requerido', min: { value: 1, message: 'Min 1' }, max: { value: 22, message: 'Max 22' } }}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Umbral de zoom (zoomThreshold)"
-                    type="number"
-                    helperText={errors.zoomThreshold?.message ?? 'Nivel de zoom al que se cambia la vista del mapa'}
-                    error={!!errors.zoomThreshold}
-                    inputProps={{ min: 1, max: 22 }}
-                  />
-                )}
-              />
-
-              {config?.mapBounds && (
-                <Box>
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Map Bounds
-                  </Typography>
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {config.mapBounds.map((point, i) => (
-                      <Chip
-                        key={i}
-                        label={`[${point[0]?.toFixed(5)}, ${point[1]?.toFixed(5)}]`}
-                        size="small"
-                        sx={{ fontFamily: 'monospace', fontSize: '0.7rem', bgcolor: '#F3F4F6', color: '#374151' }}
-                      />
-                    ))}
-                  </Box>
-                </Box>
-              )}
-
-              {updateConfig.isSuccess && (
-                <Alert severity="success" sx={{ borderRadius: 2 }}>Configuración guardada exitosamente.</Alert>
-              )}
-
-              <Box>
-                <Button variant="contained" onClick={handleSubmit(onSubmitConfig)} disabled={updateConfig.isPending}>
-                  {updateConfig.isPending ? 'Guardando...' : 'Guardar cambios'}
-                </Button>
-              </Box>
-            </Box>
           )}
         </Paper>
 

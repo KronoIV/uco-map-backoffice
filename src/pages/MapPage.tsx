@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, Popup, useMap,
 import L from 'leaflet';
 import {
   Box, Paper, Typography, Button, Chip,
-  List, ListItem, ListItemText, Tooltip, IconButton, Alert,
+  Tooltip, IconButton, Alert,
   TextField, MenuItem, Divider, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
@@ -16,7 +16,6 @@ import NavigationRoundedIcon from '@mui/icons-material/NavigationRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DirectionsWalkRoundedIcon from '@mui/icons-material/DirectionsWalkRounded';
 import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
-import GridOnRoundedIcon from '@mui/icons-material/GridOnRounded';
 import SatelliteAltRoundedIcon from '@mui/icons-material/SatelliteAltRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
 import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
@@ -38,7 +37,6 @@ import {
 } from '../utils/campus-routing';
 import { buildingsCrossed, footprintAt, type Footprint } from '../utils/campus-osm';
 import { useCampusOsm } from '../hooks/useCampusOsm';
-import campusRender from '../assets/campus-render.webp';
 
 // Fix default leaflet icons
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -1111,338 +1109,18 @@ function SimClickHandler({ onSimClick }: { onSimClick: (lat: number, lng: number
   return null;
 }
 
-// ── 2D Pixel Map Editor ───────────────────────────────────────
-const RENDER_W = 500;
-const RENDER_H = 800;
-
-const NODE_COLORS: Record<string, { bg: string; border: string; size: number }> = {
-  BUILDING: { bg: '#00d084', border: '#276749', size: 14 },
-  DOOR: { bg: '#8B5CF6', border: '#5B21B6', size: 11 },
-  ENTRANCE: { bg: '#3B82F6', border: '#1E40AF', size: 12 },
-  WAYPOINT: { bg: '#9CA3AF', border: '#6B7280', size: 9 },
-};
-
-function PixelMapEditor({
-  nodes,
-  edges,
-  onUpdatePixel,
-}: {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  onUpdatePixel: (nodeId: string, x: number, y: number) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [localPixels, setLocalPixels] = useState<Record<string, { x: number; y: number }>>({});
-  const [selected, setSelected] = useState<string | null>(null);
-  const draggingRef = useRef<{
-    nodeId: string;
-    startClientX: number;
-    startClientY: number;
-    origX: number;
-    origY: number;
-  } | null>(null);
-  const [, forceRender] = useState(0);
-
-  const getPixel = (node: GraphNode) =>
-    localPixels[node.nodeId] ?? node.pixel ?? { x: 0, y: 0 };
-
-  const getScale = () => {
-    if (!containerRef.current) return 1;
-    return containerRef.current.getBoundingClientRect().width / RENDER_W;
-  };
-
-  const handlePointerDown = (e: React.PointerEvent, nodeId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const node = nodes.find(n => n.nodeId === nodeId)!;
-    const px = getPixel(node);
-    draggingRef.current = {
-      nodeId,
-      startClientX: e.clientX,
-      startClientY: e.clientY,
-      origX: px.x,
-      origY: px.y,
-    };
-    setSelected(nodeId);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const drag = draggingRef.current;
-    if (!drag) return;
-    const scale = getScale();
-    const dx = (e.clientX - drag.startClientX) / scale;
-    const dy = (e.clientY - drag.startClientY) / scale;
-    const newX = Math.round(Math.max(0, Math.min(RENDER_W, drag.origX + dx)));
-    const newY = Math.round(Math.max(0, Math.min(RENDER_H, drag.origY + dy)));
-    setLocalPixels(prev => ({ ...prev, [drag.nodeId]: { x: newX, y: newY } }));
-    forceRender(v => v + 1);
-  };
-
-  const handlePointerUp = () => {
-    const drag = draggingRef.current;
-    if (!drag) return;
-    const px = localPixels[drag.nodeId];
-    if (px) onUpdatePixel(drag.nodeId, px.x, px.y);
-    draggingRef.current = null;
-  };
-
-  const selectedNode = selected ? nodes.find(n => n.nodeId === selected) : null;
-  const selectedPx = selectedNode ? getPixel(selectedNode) : null;
-
-  return (
-    <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>
-      {/* Canvas */}
-      <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', p: 1 }}>
-        <Box
-          ref={containerRef}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          sx={{
-            position: 'relative',
-            width: RENDER_W,
-            height: RENDER_H,
-            flexShrink: 0,
-            backgroundImage: `url(${campusRender})`,
-            backgroundSize: '100% 100%',
-            backgroundRepeat: 'no-repeat',
-            borderRadius: '18px',
-            border: '1px solid #E5E7EB',
-            cursor: draggingRef.current ? 'grabbing' : 'default',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-            userSelect: 'none',
-          }}
-        >
-          {/* SVG edges */}
-          <svg
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              pointerEvents: 'none',
-            }}
-            viewBox={`0 0 ${RENDER_W} ${RENDER_H}`}
-            preserveAspectRatio="none"
-          >
-            {edges.map(edge => {
-              const a = nodes.find(n => n.nodeId === edge.nodeA);
-              const b = nodes.find(n => n.nodeId === edge.nodeB);
-              if (!a || !b) return null;
-              const pa = getPixel(a);
-              const pb = getPixel(b);
-              return (
-                <line
-                  key={edge.id}
-                  x1={pa.x} y1={pa.y}
-                  x2={pb.x} y2={pb.y}
-                  stroke="rgba(0,208,132,0.75)"
-                  strokeWidth={2}
-                  strokeDasharray="5 3"
-                />
-              );
-            })}
-          </svg>
-
-          {/* Nodes */}
-          {nodes.map(node => {
-            const px = getPixel(node);
-            const isSelected = selected === node.nodeId;
-            const isDragging = draggingRef.current?.nodeId === node.nodeId;
-            const { bg, border, size } = NODE_COLORS[node.nodeType] ?? NODE_COLORS.WAYPOINT;
-            return (
-              <Tooltip
-                key={node.nodeId}
-                title={
-                  <Box>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700 }}>{node.nodeId}</Typography>
-                    {node.label && <Typography sx={{ fontSize: '0.7rem' }}>{node.label}</Typography>}
-                    <Typography sx={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#A7F3D0' }}>
-                      x: {px.x}, y: {px.y}
-                    </Typography>
-                  </Box>
-                }
-                placement="top"
-                arrow
-              >
-                <Box
-                  onPointerDown={e => handlePointerDown(e, node.nodeId)}
-                  sx={{
-                    position: 'absolute',
-                    left: px.x,
-                    top: px.y,
-                    width: size,
-                    height: size,
-                    borderRadius: '50%',
-                    bgcolor: bg,
-                    border: `2px solid ${border}`,
-                    transform: 'translate(-50%, -50%)',
-                    cursor: 'grab',
-                    zIndex: isDragging ? 10 : isSelected ? 5 : 1,
-                    boxShadow: isSelected
-                      ? `0 0 0 3px ${bg}66, 0 0 0 5px ${bg}33`
-                      : '0 1px 4px rgba(0,0,0,0.35)',
-                    transition: isDragging ? 'none' : 'box-shadow 0.15s',
-                    '&:hover': { boxShadow: `0 0 0 3px ${bg}55` },
-                  }}
-                />
-              </Tooltip>
-            );
-          })}
-        </Box>
-      </Box>
-
-      {/* Right panel */}
-      <Paper
-        sx={{
-          width: 280,
-          borderRadius: '18px',
-          border: '1px solid #F1F1F1',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <Box sx={{ p: 2.5, borderBottom: '1px solid #F1F1F1' }}>
-          <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 0.25 }}>
-            Editor de píxeles
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Arrastra los nodos para ajustar su posición en el mapa 2D (espacio {RENDER_W}×{RENDER_H})
-          </Typography>
-        </Box>
-
-        {/* Selected node info */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1' }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary', mb: 1 }}>
-            Nodo seleccionado
-          </Typography>
-          {selectedNode && selectedPx ? (
-            <Box
-              sx={{
-                bgcolor: '#F0FFF9',
-                border: '1px solid #A7F3D0',
-                borderRadius: '12px',
-                p: 1.5,
-              }}
-            >
-              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem' }}>
-                {selectedNode.nodeId}
-              </Typography>
-              {selectedNode.label && (
-                <Typography variant="caption" color="text.secondary">{selectedNode.label}</Typography>
-              )}
-              <Chip
-                label={selectedNode.nodeType}
-                size="small"
-                sx={{ mt: 0.5, display: 'block', width: 'fit-content', fontSize: '0.65rem' }}
-              />
-              <Divider sx={{ my: 1 }} />
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Box sx={{ flex: 1, textAlign: 'center', bgcolor: '#fff', borderRadius: '8px', p: 1, border: '1px solid #D1FAE5' }}>
-                  <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: '#00d084', lineHeight: 1 }}>
-                    {selectedPx.x}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">x</Typography>
-                </Box>
-                <Box sx={{ flex: 1, textAlign: 'center', bgcolor: '#fff', borderRadius: '8px', p: 1, border: '1px solid #D1FAE5' }}>
-                  <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: '#00d084', lineHeight: 1 }}>
-                    {selectedPx.y}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">y</Typography>
-                </Box>
-              </Box>
-            </Box>
-          ) : (
-            <Box sx={{ bgcolor: '#F8F9FB', borderRadius: '12px', p: 2, textAlign: 'center' }}>
-              <Typography variant="caption" color="text.secondary">
-                Haz clic en un nodo para seleccionarlo
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
-        {/* Legend */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1' }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary', mb: 1 }}>
-            Leyenda
-          </Typography>
-          {Object.entries(NODE_COLORS).map(([type, { bg, border }]) => (
-            <Box key={type} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.75 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: bg, border: `2px solid ${border}`, flexShrink: 0 }} />
-              <Typography variant="body2" color="text.secondary">
-                {NODE_TYPE_META[type as NodeType]?.label ?? type}
-              </Typography>
-            </Box>
-          ))}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
-            <Box sx={{ width: 24, height: 2, borderTop: '2px dashed #00d084', flexShrink: 0 }} />
-            <Typography variant="body2" color="text.secondary">Ruta</Typography>
-          </Box>
-        </Box>
-
-        {/* Node list */}
-        <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ p: 2, pb: 1 }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-              Nodos ({nodes.length})
-            </Typography>
-          </Box>
-          <List dense sx={{ flex: 1, overflow: 'auto', px: 1 }}>
-            {nodes.map(node => {
-              const px = getPixel(node);
-              const { bg, border } = NODE_COLORS[node.nodeType] ?? NODE_COLORS.WAYPOINT;
-              return (
-                <ListItem
-                  key={node.nodeId}
-                  onClick={() => setSelected(node.nodeId)}
-                  sx={{
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    bgcolor: selected === node.nodeId ? '#F0FFF9' : 'transparent',
-                    '&:hover': { bgcolor: '#F8F9FB' },
-                    mb: '1px',
-                  }}
-                >
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: bg, border: `1.5px solid ${border}`, mr: 1.5, flexShrink: 0 }} />
-                  <ListItemText
-                    primary={
-                      <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700 }}>
-                        {node.nodeId}
-                      </Typography>
-                    }
-                    secondary={
-                      <Typography sx={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'text.secondary' }}>
-                        ({px.x}, {px.y})
-                      </Typography>
-                    }
-                  />
-                </ListItem>
-              );
-            })}
-          </List>
-        </Box>
-      </Paper>
-    </Box>
-  );
-}
-
 // ── Main page ──────────────────────────────────────────────────
-type MapTab = 'editor' | 'preview' | 'pixel' | 'ar';
+type MapTab = 'editor' | 'preview' | 'ar';
 
 const MAP_TABS: SectionTab<MapTab>[] = [
   { value: 'editor', label: 'Caminos', icon: <EditRoundedIcon sx={{ fontSize: 16 }} /> },
   { value: 'preview', label: 'Vista usuario', icon: <NavigationRoundedIcon sx={{ fontSize: 16 }} /> },
-  { value: 'pixel', label: 'Mapa 2D', icon: <GridOnRoundedIcon sx={{ fontSize: 16 }} /> },
   { value: 'ar', label: 'Interior AR', icon: <ViewInArRoundedIcon sx={{ fontSize: 16 }} /> },
 ];
 
 const MAP_SUBTITLES: Record<MapTab, string> = {
   editor: 'Nodos y caminos exteriores que usa la navegación GPS',
   preview: 'Simula la ruta que verá un estudiante en el mapa exterior',
-  pixel: 'Ubica los nodos sobre la imagen 2D del campus',
   ar: 'Destinos de cada lugar y escaleras sobre el escaneo 3D de MultiSet',
 };
 
@@ -1562,7 +1240,6 @@ export default function MapPage() {
     await graphService.createNode({
       nodeId,
       gps: { lat: lerp(a.gps.lat, b.gps.lat), lng: lerp(a.gps.lng, b.gps.lng) },
-      pixel: { x: Math.round(lerp(a.pixel?.x ?? 0, b.pixel?.x ?? 0)), y: Math.round(lerp(a.pixel?.y ?? 0, b.pixel?.y ?? 0)) },
       label,
       nodeType,
       active: true,
@@ -1593,7 +1270,7 @@ export default function MapPage() {
       } else {
         nodeId = newId('W');
         await graphService.createNode({
-          nodeId, gps: { lat, lng }, pixel: { x: 0, y: 0 }, label, nodeType: 'POI', poiType: defaultPoiType, active: true,
+          nodeId, gps: { lat, lng }, label, nodeType: 'POI', poiType: defaultPoiType, active: true,
         });
       }
       setSelection({ kind: 'node', id: nodeId });
@@ -1606,7 +1283,7 @@ export default function MapPage() {
     if (!drawing) { setSelection(null); return; }
     void run(async () => {
       const nodeId = newId('W');
-      await graphService.createNode({ nodeId, gps: { lat, lng }, pixel: { x: 0, y: 0 }, nodeType: 'WAYPOINT', active: true });
+      await graphService.createNode({ nodeId, gps: { lat, lng }, nodeType: 'WAYPOINT', active: true });
       if (drawing.from) await connect(drawing.from, nodeId);
       setDrawing({ from: nodeId });
     }, 'No se pudo agregar el punto. Revisa la conexión.');
@@ -1706,13 +1383,6 @@ export default function MapPage() {
     if (fly && gps) setFocus(f => ({ ...gps, n: (f?.n ?? 0) + 1 }));
   };
 
-  const handlePixelUpdate = (nodeId: string, x: number, y: number) => {
-    const node = findNode(nodeId);
-    if (node) {
-      updateNodeMutation.mutate({ id: nodeId, data: { ...node, pixel: { x, y } } });
-    }
-  };
-
   const center: [number, number] =
     nodes.length > 0
       ? [
@@ -1761,8 +1431,6 @@ export default function MapPage() {
         <PoiEditorPage />
       ) : tab === 'preview' ? (
         <UserNavPreview nodes={rawNodes} edges={edges} view3d={view3d} onView3d={setView3d} />
-      ) : tab === 'pixel' ? (
-        <PixelMapEditor nodes={nodes} edges={edges} onUpdatePixel={handlePixelUpdate} />
       ) : (
       <>
       <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>

@@ -18,11 +18,6 @@ export interface GpsPoint {
   lng: number;
 }
 
-export interface PixelPoint {
-  x: number;
-  y: number;
-}
-
 // ──────────────── Graph ───────────────────────────────────────
 /** DOOR: puerta de un edificio sobre la fachada, conectada a su nodo BUILDING (ahí termina la ruta exterior). */
 export type NodeType = 'BUILDING' | 'DOOR' | 'ENTRANCE' | 'WAYPOINT' | 'POI';
@@ -30,7 +25,6 @@ export type NodeType = 'BUILDING' | 'DOOR' | 'ENTRANCE' | 'WAYPOINT' | 'POI';
 export interface GraphNode {
   nodeId: string;
   gps: GpsPoint;
-  pixel: PixelPoint;
   label?: string;
   nodeType: NodeType;
   /** Solo POI: clave de su clase (catálogo en utils/poi-catalog.ts). */
@@ -160,13 +154,6 @@ export interface PoiClip {
   clipId: string;
   displayName: string;
   active: boolean;
-}
-
-// ──────────────── MapConfig ───────────────────────────────────
-export interface MapConfig {
-  id?: string;
-  mapBounds?: number[][];
-  zoomThreshold?: number;
 }
 
 // ──────────────── DeviceSession ───────────────────────────────
