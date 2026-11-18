@@ -4,6 +4,7 @@ import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { PERIOD_OPTIONS, toInputDate } from '../../hooks/usePeriod';
 import type { PeriodPreset, PeriodState } from '../../hooks/usePeriod';
 import { PLATFORM_LABEL, PLATFORM_OPTIONS } from '../../utils/analyticsFormat';
+import { brand } from '../../theme/brand';
 
 interface Props {
   period: PeriodState;
@@ -19,7 +20,7 @@ export default function PeriodFilter({ period, fetching, children }: Props) {
     <Box
       sx={{
         display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5,
-        p: 1.5, mb: 3, bgcolor: '#fff', border: '1px solid #F1F1F1', borderRadius: '16px',
+        p: 1.5, mb: 3, bgcolor: '#fff', border: `1px solid ${brand.border}`, borderRadius: '16px',
       }}
     >
       <ToggleButtonGroup
@@ -33,7 +34,7 @@ export default function PeriodFilter({ period, fetching, children }: Props) {
           '& .MuiToggleButton-root': {
             textTransform: 'none', border: 'none', borderRadius: '10px !important', px: 1.5, py: 0.5,
             fontWeight: 600, color: 'text.secondary',
-            '&.Mui-selected': { bgcolor: '#E6FBF3', color: '#047857' },
+            '&.Mui-selected': { bgcolor: brand.green50, color: brand.greenStrong },
           },
         }}
       >
@@ -77,7 +78,7 @@ export default function PeriodFilter({ period, fetching, children }: Props) {
           <span>
             <IconButton
               size="small" onClick={period.refresh} disabled={fetching} aria-label="Actualizar datos"
-              sx={{ border: '1px solid #E5E7EB', borderRadius: '8px' }}
+              sx={{ border: `1px solid ${brand.border}`, borderRadius: '8px' }}
             >
               <RefreshRoundedIcon sx={{ fontSize: 18 }} />
             </IconButton>

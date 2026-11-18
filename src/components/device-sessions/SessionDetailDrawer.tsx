@@ -5,19 +5,20 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import type { DeviceSession } from '../../types';
 import { PERMISSION_LABEL, fmtDuration } from '../../utils/analyticsFormat';
+import { brand } from '../../theme/brand';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min
 const TODAY_MS = 24 * 60 * 60 * 1000;
 
 const PERMISSION_STATE: Record<string, { label: string; color: string }> = {
-  granted: { label: 'Concedido', color: '#047857' },
-  'not-required': { label: 'No lo pide', color: '#6B7280' },
-  prompt: { label: 'Sin responder', color: '#6B7280' },
-  unknown: { label: 'Sin responder', color: '#6B7280' },
-  error: { label: 'Sin responder', color: '#6B7280' },
-  denied: { label: 'Rechazado', color: '#B45309' },
-  blocked: { label: 'Bloqueado', color: '#B91C1C' },
-  unavailable: { label: 'No disponible', color: '#6B7280' },
+  granted: { label: 'Concedido', color: brand.greenStrong },
+  'not-required': { label: 'No lo pide', color: brand.text3 },
+  prompt: { label: 'Sin responder', color: brand.text3 },
+  unknown: { label: 'Sin responder', color: brand.text3 },
+  error: { label: 'Sin responder', color: brand.text3 },
+  denied: { label: 'Rechazado', color: brand.orangeInk },
+  blocked: { label: 'Bloqueado', color: brand.danger },
+  unavailable: { label: 'No disponible', color: brand.text3 },
 };
 
 function fmtDate(iso?: string) {
@@ -30,9 +31,9 @@ function fmtDate(iso?: string) {
 
 function statusChip(lastSeen: string) {
   const diff = Date.now() - new Date(lastSeen).getTime();
-  if (diff < ACTIVE_MS) return { label: 'Activo ahora', bg: '#D1FAE5', color: '#065F46' };
-  if (diff < TODAY_MS) return { label: 'Activo hoy', bg: '#DBEAFE', color: '#1E40AF' };
-  return { label: 'Inactivo', bg: '#F3F4F6', color: '#6B7280' };
+  if (diff < ACTIVE_MS) return { label: 'Activo ahora', bg: brand.green50, color: brand.greenStrong };
+  if (diff < TODAY_MS) return { label: 'Activo hoy', bg: brand.blue50, color: brand.blue };
+  return { label: 'Inactivo', bg: brand.bgMuted, color: brand.text3 };
 }
 
 function InfoRow({ label, value, mono = false, copyable = false }: {
@@ -49,7 +50,7 @@ function InfoRow({ label, value, mono = false, copyable = false }: {
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         py: '8px',
-        borderBottom: '1px solid #F9FAFB',
+        borderBottom: `1px solid ${brand.bgMuted}`,
         gap: 2,
       }}
     >
@@ -104,7 +105,7 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
         sx: {
           width: 380,
           p: 0,
-          borderLeft: '1px solid #F1F1F1',
+          borderLeft: `4px solid ${brand.green}`,
           boxShadow: '-4px 0 24px rgba(0,0,0,0.06)',
         },
       }}
@@ -114,7 +115,7 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
         sx={{
           px: 3,
           py: 2,
-          borderBottom: '1px solid #F1F1F1',
+          borderBottom: `1px solid ${brand.border}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -138,9 +139,9 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
           <Chip
             label={status.label}
             size="small"
-            sx={{ bgcolor: status.bg, color: status.color, fontWeight: 600 }}
+            sx={{ bgcolor: status.bg, color: status.color, fontWeight: 700 }}
           />
-          <IconButton size="small" onClick={onClose}>
+          <IconButton size="small" onClick={onClose} aria-label="Cerrar detalle">
             <CloseRoundedIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Box>
@@ -150,7 +151,7 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
         {/* Activity summary */}
         <Box
           sx={{
-            bgcolor: '#F8F9FB',
+            bgcolor: brand.green50,
             borderRadius: '12px',
             p: 2,
             mb: 2,
@@ -159,7 +160,7 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
           }}
         >
           <Box sx={{ flex: 1, textAlign: 'center' }}>
-            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#00d084', lineHeight: 1 }}>
+            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: brand.green, lineHeight: 1 }}>
               {session.visitCount ? session.visitCount : '—'}
             </Typography>
             <Typography variant="caption" color="text.secondary">
@@ -204,7 +205,7 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
               const state = session.permissions?.[k];
               const info = state ? PERMISSION_STATE[state] : undefined;
               return (
-                <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: '6px', borderBottom: '1px solid #F9FAFB' }}>
+                <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: '6px', borderBottom: `1px solid ${brand.bgMuted}` }}>
                   <Typography sx={{ fontSize: '0.8rem' }}>{PERMISSION_LABEL[k]}</Typography>
                   <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: info?.color ?? 'text.secondary' }}>
                     {info?.label ?? 'Sin dato'}
@@ -263,12 +264,12 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
         </Typography>
         <Box
           sx={{
-            bgcolor: '#F8F9FB',
+            bgcolor: brand.bg,
             borderRadius: '10px',
             p: 1.5,
             fontFamily: 'monospace',
             fontSize: '0.7rem',
-            color: '#374151',
+            color: brand.text2,
             wordBreak: 'break-all',
             lineHeight: 1.6,
           }}

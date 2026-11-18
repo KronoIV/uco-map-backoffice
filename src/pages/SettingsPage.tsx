@@ -14,6 +14,7 @@ import MultiSetUsageCard from '../components/MultiSetUsageCard';
 import { useSettings, useUpdateSetting, useCreateSetting, useDeleteSetting } from '../hooks/useSettings';
 import { resolveApiError } from '../services/api';
 import type { AppSetting, SettingType } from '../types';
+import { brand } from '../theme/brand';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,10 +26,10 @@ const SETTING_TYPE_LABELS: Record<SettingType, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  navigation: '#E3F2FD',
-  ui:         '#F3E5F5',
-  features:   '#E8F5E9',
-  timing:     '#FFF3E0',
+  navigation: brand.blue50,
+  ui:         brand.beige,
+  features:   brand.green50,
+  timing:     brand.yellow50,
 };
 
 function CategoryChip({ category }: { category?: string }) {
@@ -38,10 +39,10 @@ function CategoryChip({ category }: { category?: string }) {
       label={category}
       size="small"
       sx={{
-        bgcolor: CATEGORY_COLORS[category] ?? '#F5F5F5',
-        color: '#374151',
+        bgcolor: CATEGORY_COLORS[category] ?? brand.bgMuted,
+        color: brand.text2,
         fontSize: '0.7rem',
-        fontWeight: 600,
+        fontWeight: 700,
         height: 22,
         borderRadius: '8px',
       }}
@@ -154,8 +155,8 @@ export default function SettingsPage() {
         <MultiSetUsageCard onMessage={setSnackbar} />
 
         {/* ── Feature Flags ──────────────────────────────────────────────── */}
-        <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', p: 3 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
+        <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', p: 3 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 0.5 }}>
             Parámetros de la aplicación
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
@@ -173,7 +174,7 @@ export default function SettingsPage() {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ '& th': { fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary', bgcolor: '#F8F9FB', borderBottom: '1px solid #F1F1F1' } }}>
+                  <TableRow>
                     <TableCell>Clave</TableCell>
                     <TableCell>Valor</TableCell>
                     <TableCell>Tipo</TableCell>
@@ -185,7 +186,7 @@ export default function SettingsPage() {
                 <TableBody>
                   {settings.map((s) => (
                     <TableRow key={s.key} sx={{ '&:last-child td': { border: 0 } }}>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600, color: '#1a1a1a' }}>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600, color: brand.ink }}>
                         {s.key}
                       </TableCell>
                       <TableCell>
@@ -232,8 +233,8 @@ export default function SettingsPage() {
         </Paper>
 
         {/* ── System Info ────────────────────────────────────────────────── */}
-        <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', p: 3 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
+        <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', p: 3 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 0.5 }}>
             Información del sistema
           </Typography>
           <Divider sx={{ my: 2 }} />

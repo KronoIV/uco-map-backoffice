@@ -20,6 +20,7 @@ import { graphService } from '../services/graphService';
 import { roomService } from '../services/roomService';
 import { resolveApiError } from '../services/api';
 import type { Building, Room } from '../types';
+import { brand } from '../theme/brand';
 
 /** Los edificios y sus puntos en el mapa se guardan juntos en el servidor: refrescar ambos. */
 function invalidateBuildings(qc: ReturnType<typeof useQueryClient>) {
@@ -55,7 +56,7 @@ function BuildingFormDialog({ open, onClose, building }: { open: boolean; onClos
   const formValues = {
     buildingId: building?.buildingId ?? '',
     label: building?.label ?? '',
-    color: building?.color ?? '#00d084',
+    color: building?.color ?? brand.green,
     category: building?.category ?? '',
     lat: building?.gps?.lat ?? 0,
     lng: building?.gps?.lng ?? 0,
@@ -343,7 +344,7 @@ function BuildingsTab() {
         </Button>
       </Box>
 
-      <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+      <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', overflow: 'hidden' }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -371,7 +372,7 @@ function BuildingsTab() {
                     <TableCell sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.buildingId}</TableCell>
                     <TableCell sx={{ fontWeight: 500 }}>{b.label}</TableCell>
                     <TableCell>
-                      {b.category && <Chip label={b.category} size="small" sx={{ bgcolor: '#F3F4F6', color: '#374151' }} />}
+                      {b.category && <Chip label={b.category} size="small" sx={{ bgcolor: brand.bgMuted, color: brand.text2 }} />}
                     </TableCell>
                     <TableCell>
                       {b.color && (
@@ -392,12 +393,12 @@ function BuildingsTab() {
                             <Chip
                               label={point.nodeId} size="small" clickable
                               onClick={() => navigate(`/map?node=${encodeURIComponent(point.nodeId)}`)}
-                              sx={{ bgcolor: '#D1FAE5', color: '#065F46', fontFamily: 'monospace' }}
+                              sx={{ bgcolor: brand.green50, color: brand.greenStrong, fontFamily: 'monospace' }}
                             />
                           </Tooltip>
                         ) : (
                           <Tooltip title="No tiene punto en el mapa: la app no puede trazar la ruta hasta aquí">
-                            <Chip label="Sin ubicar" size="small" sx={{ bgcolor: '#FEF3C7', color: '#92400E' }} />
+                            <Chip label="Sin ubicar" size="small" sx={{ bgcolor: brand.orange50, color: brand.orangeInk }} />
                           </Tooltip>
                         );
                       })()}
@@ -405,7 +406,7 @@ function BuildingsTab() {
                     <TableCell>
                       <Chip
                         label={b.active ? 'Activo' : 'Inactivo'} size="small"
-                        sx={{ bgcolor: b.active ? '#D1FAE5' : '#FEE2E2', color: b.active ? '#065F46' : '#991B1B' }}
+                        sx={{ bgcolor: b.active ? brand.green50 : brand.dangerBg, color: b.active ? brand.greenStrong : brand.danger }}
                       />
                     </TableCell>
                     <TableCell align="right">
@@ -416,7 +417,7 @@ function BuildingsTab() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Eliminar">
-                          <IconButton size="small" onClick={() => setDeleteConfirm(b)} sx={{ color: '#EF4444' }}>
+                          <IconButton size="small" onClick={() => setDeleteConfirm(b)} sx={{ color: brand.danger }}>
                             <DeleteRoundedIcon sx={{ fontSize: 16 }} />
                           </IconButton>
                         </Tooltip>
@@ -452,7 +453,7 @@ function BuildingsTab() {
             variant="contained"
             onClick={() => deleteMutation.mutate(deleteConfirm!.buildingId)}
             disabled={deleteMutation.isPending}
-            sx={{ background: '#EF4444', '&:hover': { background: '#DC2626' } }}
+            color="error"
           >
             {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
           </Button>
@@ -541,7 +542,7 @@ function RoomsTab() {
         </Button>
       </Box>
 
-      <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+      <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', overflow: 'hidden' }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -570,7 +571,7 @@ function RoomsTab() {
                       <Chip
                         label={buildings.find(b => b.category === room.category)?.label ?? room.category}
                         size="small"
-                        sx={{ bgcolor: '#F3F4F6', color: '#374151' }}
+                        sx={{ bgcolor: brand.bgMuted, color: brand.text2 }}
                       />
                     </TableCell>
                     <TableCell sx={{ color: room.floor == null ? 'text.disabled' : undefined }}>
@@ -584,8 +585,8 @@ function RoomsTab() {
                           disabled={toggleMutation.isPending}
                           onChange={() => toggleMutation.mutate(room)}
                           sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#2F855A' },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#2F855A' },
+                            '& .MuiSwitch-switchBase.Mui-checked': { color: brand.green },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: brand.green },
                           }}
                         />
                       </Tooltip>
@@ -598,7 +599,7 @@ function RoomsTab() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Eliminar">
-                          <IconButton size="small" onClick={() => setDeleteConfirm(room)} sx={{ color: '#EF4444' }}>
+                          <IconButton size="small" onClick={() => setDeleteConfirm(room)} sx={{ color: brand.danger }}>
                             <DeleteRoundedIcon sx={{ fontSize: 16 }} />
                           </IconButton>
                         </Tooltip>
@@ -640,7 +641,7 @@ function RoomsTab() {
             variant="contained"
             onClick={() => deleteMutation.mutate(deleteConfirm!.roomId)}
             disabled={deleteMutation.isPending}
-            sx={{ background: '#EF4444', '&:hover': { background: '#DC2626' } }}
+            color="error"
           >
             {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
           </Button>
@@ -668,7 +669,7 @@ export default function CampusPage() {
           gap: 1.5,
           mb: 3,
           p: 0.75,
-          bgcolor: '#F3F4F6',
+          bgcolor: brand.bgMuted,
           borderRadius: '14px',
           width: 'fit-content',
         }}
@@ -688,12 +689,12 @@ export default function CampusPage() {
               py: 1,
               borderRadius: '10px',
               cursor: 'pointer',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: '0.875rem',
               transition: 'all 0.18s ease',
               bgcolor: tab === i ? '#fff' : 'transparent',
-              color: tab === i ? 'text.primary' : 'text.secondary',
-              boxShadow: tab === i ? '0 1px 6px rgba(0,0,0,0.10)' : 'none',
+              color: tab === i ? brand.greenStrong : 'text.secondary',
+              boxShadow: tab === i ? `0 1px 6px rgba(0,0,0,0.10), inset 0 -3px 0 ${brand.yellow}` : 'none',
               userSelect: 'none',
               '&:hover': {
                 color: 'text.primary',
@@ -701,7 +702,7 @@ export default function CampusPage() {
               },
             }}
           >
-            <Box sx={{ color: tab === i ? '#2F855A' : 'inherit', display: 'flex' }}>
+            <Box sx={{ color: tab === i ? brand.green : 'inherit', display: 'flex' }}>
               {item.icon}
             </Box>
             {item.label}

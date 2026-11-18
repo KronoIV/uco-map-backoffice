@@ -18,6 +18,7 @@ import { buildingService } from '../services/buildingService';
 import { resolveApiError } from '../services/api';
 import { poiTypeOf } from '../utils/poi-catalog';
 import type { CampusEvent, EventPlaceType } from '../types';
+import { brand } from '../theme/brand';
 
 const MAX_DAYS = 90;
 const DURATIONS = [
@@ -27,8 +28,8 @@ const DURATIONS = [
   { label: '2 h', minutes: 120 },
 ];
 const switchSx = {
-  '& .MuiSwitch-switchBase.Mui-checked': { color: '#2F855A' },
-  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#2F855A' },
+  '& .MuiSwitch-switchBase.Mui-checked': { color: brand.green },
+  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: brand.green },
 };
 
 // ─── Lugares a los que la app sabe llegar ────────────────────────────────────
@@ -103,11 +104,11 @@ function formatSchedule(e: CampusEvent): string {
 }
 
 function statusOf(e: CampusEvent, now: number, placeOk: boolean) {
-  if (!e.active) return { label: 'Pausado', bg: '#F3F4F6', color: '#4B5563' };
-  if (Date.parse(e.endsAt) <= now) return { label: 'Finalizado', bg: '#F3F4F6', color: '#6B7280' };
-  if (!placeOk) return { label: 'Lugar no disponible', bg: '#FEF3C7', color: '#92400E' };
-  if (Date.parse(e.startsAt) > now) return { label: 'Programado', bg: '#DBEAFE', color: '#1E40AF' };
-  return { label: 'En la app ahora', bg: '#D1FAE5', color: '#065F46' };
+  if (!e.active) return { label: 'Pausado', bg: brand.bgMuted, color: brand.text2 };
+  if (Date.parse(e.endsAt) <= now) return { label: 'Finalizado', bg: brand.bgMuted, color: brand.text3 };
+  if (!placeOk) return { label: 'Lugar no disponible', bg: brand.orange50, color: brand.orangeInk };
+  if (Date.parse(e.startsAt) > now) return { label: 'Programado', bg: brand.blue50, color: brand.blue };
+  return { label: 'En la app ahora', bg: brand.green50, color: brand.greenStrong };
 }
 
 // ─── Formulario ──────────────────────────────────────────────────────────────
@@ -258,7 +259,7 @@ function EventFormDialog({ event, initial, onClose }: { event: CampusEvent | nul
               return (
                 <Chip key={d.minutes} label={d.label} size="small" clickable onClick={() => setDuration(d.minutes)}
                   variant={selected ? 'filled' : 'outlined'}
-                  sx={selected ? { bgcolor: '#2F855A', color: '#fff', fontWeight: 600, '&:hover': { bgcolor: '#276749' } } : { fontWeight: 500 }} />
+                  sx={selected ? { bgcolor: brand.greenStrong, color: '#fff', fontWeight: 700, '&:hover': { bgcolor: brand.greenHover } } : { fontWeight: 400 }} />
               );
             })}
           </Box>
@@ -362,7 +363,7 @@ export default function EventsPage() {
         Quien lo cierre no lo vuelve a ver.
       </Alert>
 
-      <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+      <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', overflow: 'hidden' }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -398,7 +399,7 @@ export default function EventsPage() {
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <PlaceRoundedIcon sx={{ fontSize: 16, color: place ? '#00b574' : 'text.disabled' }} />
+                          <PlaceRoundedIcon sx={{ fontSize: 16, color: place ? brand.green : 'text.disabled' }} />
                           <Box>
                             <Typography variant="body2">{place?.label ?? e.placeId}</Typography>
                             <Typography variant="caption" color="text.secondary">
@@ -425,7 +426,7 @@ export default function EventsPage() {
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Eliminar">
-                            <IconButton size="small" onClick={() => setDeleteConfirm(e)} sx={{ color: '#EF4444' }}>
+                            <IconButton size="small" onClick={() => setDeleteConfirm(e)} sx={{ color: brand.danger }}>
                               <DeleteRoundedIcon sx={{ fontSize: 16 }} />
                             </IconButton>
                           </Tooltip>
@@ -466,7 +467,7 @@ export default function EventsPage() {
             variant="contained"
             onClick={() => deleteMutation.mutate(deleteConfirm!.id)}
             disabled={deleteMutation.isPending}
-            sx={{ background: '#EF4444', '&:hover': { background: '#DC2626' } }}
+            color="error"
           >
             {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
           </Button>

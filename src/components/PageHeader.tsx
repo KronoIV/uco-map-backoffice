@@ -1,4 +1,5 @@
 import { Box, Typography } from '@mui/material';
+import { brand } from '../theme/brand';
 
 interface PageHeaderProps {
   title: string;
@@ -17,11 +18,13 @@ export default function PageHeader({ title, subtitle, action }: PageHeaderProps)
       }}
     >
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2, color: 'text.primary' }}>
+        <Typography variant="h5" component="h1" sx={{ fontWeight: 700, lineHeight: 1.2, color: 'text.primary' }}>
           {title}
         </Typography>
+        {/* Filete amarillo bajo el título, como en las piezas del manual */}
+        <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: brand.yellow, mt: '8px' }} />
         {subtitle && (
-          <Typography variant="body2" sx={{ color: 'text.secondary', mt: '4px' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: '8px' }}>
             {subtitle}
           </Typography>
         )}

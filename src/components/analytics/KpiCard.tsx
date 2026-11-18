@@ -5,6 +5,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { Metric } from '../../types/analytics';
 import { relativeChange } from '../../utils/analyticsFormat';
 import { cardSx } from './ChartCard';
+import { brand } from '../../theme/brand';
 
 interface Props {
   label: string;
@@ -64,8 +65,8 @@ function Delta({ metric, higherIsBetter, isRate, previousLabel }: {
   }
   const flat = Math.abs(diff) < 0.005;
   const good = flat ? null : (diff > 0) === higherIsBetter;
-  const color = good == null ? 'text.secondary' : good ? '#047857' : '#B91C1C';
-  const bg = good == null ? '#F3F4F6' : good ? '#E6FBF3' : '#FEECEC';
+  const color = good == null ? 'text.secondary' : good ? brand.greenStrong : brand.danger;
+  const bg = good == null ? brand.bgMuted : good ? brand.green50 : brand.dangerBg;
   const text = isRate
     ? `${diff > 0 ? '+' : ''}${(diff * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} pp`
     : `${(Math.abs(diff) * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} %`;

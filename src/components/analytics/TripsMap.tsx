@@ -5,6 +5,7 @@ import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { TripAnalytics } from '../../types/analytics';
 import { fmtPercent } from '../../utils/analyticsFormat';
+import { brand } from '../../theme/brand';
 
 interface Props {
   origins: TripAnalytics['originPoints'];
@@ -12,8 +13,8 @@ interface Props {
   height?: number;
 }
 
-const ORIGIN = '#F59E0B';
-const DESTINATION = '#047857';
+const ORIGIN = brand.orange;
+const DESTINATION = brand.green;
 // Centro aproximado del campus (si todavía no hay puntos)
 const CAMPUS: [number, number] = [6.1501, -75.3662];
 
@@ -40,7 +41,7 @@ export default function TripsMap({ origins, destinations, height = 360 }: Props)
 
   return (
     <Box>
-      <Box sx={{ height, borderRadius: '14px', overflow: 'hidden', border: '1px solid #F1F1F1' }}>
+      <Box sx={{ height, borderRadius: '14px', overflow: 'hidden', border: `1px solid ${brand.border}` }}>
         <MapContainer center={CAMPUS} zoom={17} maxZoom={20} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

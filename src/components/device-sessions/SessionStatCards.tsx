@@ -6,6 +6,7 @@ import LaptopRoundedIcon from '@mui/icons-material/LaptopRounded';
 import StatCard from '../../components/StatCard';
 import type { SessionStats } from '../../types';
 import { PLATFORM_LABEL, fmtDuration } from '../../utils/analyticsFormat';
+import { brand } from '../../theme/brand';
 
 interface Props {
   stats?: SessionStats;
@@ -28,7 +29,7 @@ export default function SessionStatCards({ stats, loading }: Props) {
       value: loading ? '—' : (stats?.totalDevices ?? 0),
       subtitle: 'Únicos registrados',
       icon: <DevicesRoundedIcon />,
-      color: '#00d084',
+      color: brand.green,
     },
     {
       title: 'Visitas',
@@ -37,21 +38,21 @@ export default function SessionStatCards({ stats, loading }: Props) {
         ? `${fmtDuration(stats.totalActiveMs)} de uso real en total`
         : 'Se miden desde la versión 2.1',
       icon: <RepeatRoundedIcon />,
-      color: '#6366F1',
+      color: brand.blue,
     },
     {
       title: 'Activos (24 h)',
       value: loading ? '—' : activeToday,
       subtitle: 'Con ping en las últimas 24 h',
       icon: <PhoneAndroidRoundedIcon />,
-      color: '#F59E0B',
+      color: brand.orange,
     },
     {
       title: 'Dispositivos móviles',
       value: loading ? '—' : mobileCount,
       subtitle: `${desktopCount} de escritorio`,
       icon: <LaptopRoundedIcon />,
-      color: '#3B82F6',
+      color: brand.teal,
     },
   ];
 
@@ -80,30 +81,31 @@ export function PlatformDistribution({
   const entries = Object.entries(stats?.byPlatform ?? {}).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, v]) => s + v, 0);
 
+  // Paleta institucional (theme/brand.ts)
   const COLORS: Record<string, string> = {
-    Android: '#3DDC84',
-    iOS: '#555555',
-    'Desktop-Windows': '#0078D4',
-    'Desktop-Mac': '#999999',
-    'Desktop-Linux': '#FCC624',
-    Web: '#6366F1',
-    Postman: '#FF6C37',
-    'App-Native': '#00d084',
-    Unknown: '#D1D5DB',
+    Android: brand.green,
+    iOS: brand.text2,
+    'Desktop-Windows': brand.blue,
+    'Desktop-Mac': brand.text4,
+    'Desktop-Linux': brand.orange,
+    Web: brand.teal,
+    Postman: brand.olive,
+    'App-Native': brand.greenDark,
+    Unknown: brand.borderStrong,
   };
 
   return (
     <Box
       sx={{
         bgcolor: '#fff',
-        border: '1px solid #F1F1F1',
-        borderRadius: '18px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+        border: `1px solid ${brand.border}`,
+        borderRadius: '16px',
+        boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
         p: 3,
         height: '100%',
       }}
     >
-      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 2 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 2 }}>
         Distribución por plataforma
       </Typography>
 
@@ -121,7 +123,7 @@ export function PlatformDistribution({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {entries.map(([platform, count]) => {
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const color = COLORS[platform] ?? '#9CA3AF';
+            const color = COLORS[platform] ?? brand.text4;
             return (
               <Box key={platform}>
                 <Box
@@ -152,7 +154,7 @@ export function PlatformDistribution({
                 <Box
                   sx={{
                     height: 6,
-                    bgcolor: '#F3F4F6',
+                    bgcolor: brand.bgMuted,
                     borderRadius: 100,
                     overflow: 'hidden',
                   }}

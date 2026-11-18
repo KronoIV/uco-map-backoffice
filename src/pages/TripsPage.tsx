@@ -25,6 +25,7 @@ import {
   ABANDON_STAGE_LABEL, END_REASON_LABEL, START_MODE_LABEL, fmtDay, fmtDuration as fmtDurationLong, fmtMeters as fmtMetersLong,
   fmtNumber, fmtPercent,
 } from '../utils/analyticsFormat';
+import { brand } from '../theme/brand';
 
 function fmtDuration(ms?: number | null) {
   if (ms == null) return '—';
@@ -46,10 +47,10 @@ function fmtDate(iso?: string) {
 
 function statusChip(trip: NavigationTrip) {
   if (trip.status === 'ARRIVED')
-    return <Chip label="Llegó" size="small" sx={{ bgcolor: '#D1FAE5', color: '#065F46', fontWeight: 600 }} />;
+    return <Chip label="Llegó" size="small" color="success" />;
   if (trip.status === 'ABANDONED')
-    return <Chip label="Abandonó" size="small" sx={{ bgcolor: '#FEE2E2', color: '#991B1B', fontWeight: 600 }} />;
-  return <Chip label="En curso" size="small" sx={{ bgcolor: '#DBEAFE', color: '#1E40AF', fontWeight: 600 }} />;
+    return <Chip label="Abandonó" size="small" color="error" />;
+  return <Chip label="En curso" size="small" color="info" />;
 }
 
 const columns: GridColDef<NavigationTrip>[] = [
@@ -214,9 +215,9 @@ export default function TripsPage() {
             {t && (
               <TrendChart ariaLabel="Recorridos por día" labels={t.daily.map(x => fmtDay(x.date))}
                 series={[
-                  { name: 'Iniciados', color: '#3B82F6', values: t.daily.map(x => x.total) },
-                  { name: 'Llegaron', color: '#00b874', values: t.daily.map(x => x.arrived) },
-                  { name: 'Abandonados', color: '#EF4444', values: t.daily.map(x => x.abandoned), dashed: true },
+                  { name: 'Iniciados', color: brand.blue, values: t.daily.map(x => x.total) },
+                  { name: 'Llegaron', color: brand.green, values: t.daily.map(x => x.arrived) },
+                  { name: 'Abandonados', color: brand.danger, values: t.daily.map(x => x.abandoned), dashed: true },
                 ]} />
             )}
           </ChartCard>
@@ -245,12 +246,12 @@ export default function TripsPage() {
             loading={loading} error={err} empty={noTrips}>
             {t && (
               <>
-                <BarList color="#F59E0B" items={t.origins.slice(0, 7).map(o => ({
+                <BarList color={brand.orange} items={t.origins.slice(0, 7).map(o => ({
                   key: o.label, label: o.label, value: o.total,
                   hint: `${fmtPercent(o.total ? o.arrived / o.total : null)} llegaron a su destino`,
                 }))} />
                 <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, mt: 2.5, mb: 1 }}>Distancia al edificio al empezar</Typography>
-                <ColumnChart color="#F59E0B" height={70}
+                <ColumnChart color={brand.orange} height={70}
                   items={t.startDistances.map(b => ({ label: b.label, value: b.count }))} />
               </>
             )}
@@ -274,13 +275,13 @@ export default function TripsPage() {
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <ChartCard title="Destinos menos usados" subtitle="Lugares con pocos recorridos en el periodo" loading={loading} error={err}
             empty={!t || t.destinations.length <= 8} emptyText="Hay pocos destinos: todos aparecen en «más buscados»">
-            {t && <BarList color="#9CA3AF" items={t.destinations.slice(-5).reverse().map(d => destinationItem(d))} />}
+            {t && <BarList color={brand.text4} items={t.destinations.slice(-5).reverse().map(d => destinationItem(d))} />}
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 12, lg: 4 }}>
           <ChartCard title="Donde menos llegan" subtitle="Menor tasa de llegada (mín. 3 recorridos terminados)" loading={loading} error={err}
             empty={hardest.length === 0} emptyText="Aún no hay destinos con suficientes recorridos">
-            <BarList color="#EF4444" max={1}
+            <BarList color={brand.danger} max={1}
               items={hardest.map(d => ({
                 key: `${d.building}|${d.roomName}`, label: d.roomName, value: d.completionRate ?? 0,
                 display: `${fmtPercent(d.completionRate)} llegan · ${fmtNumber(d.arrived + d.abandoned)} terminados`,
@@ -294,7 +295,7 @@ export default function TripsPage() {
         <Grid size={{ xs: 12, md: 4 }}>
           <ChartCard title="¿En qué etapa abandonan?" loading={loading} error={err}
             empty={!t || t.abandonStages.length === 0} emptyText="Ningún recorrido abandonado">
-            {t && <BarList color="#EF4444" items={t.abandonStages.map(c => ({
+            {t && <BarList color={brand.danger} items={t.abandonStages.map(c => ({
               key: c.key, label: ABANDON_STAGE_LABEL[c.key]?.label ?? c.key, value: c.count, hint: ABANDON_STAGE_LABEL[c.key]?.hint,
             }))} />}
           </ChartCard>
@@ -302,14 +303,14 @@ export default function TripsPage() {
         <Grid size={{ xs: 12, md: 4 }}>
           <ChartCard title="¿Cómo terminaron?" subtitle="Motivo de cierre de los abandonados" loading={loading} error={err}
             empty={!t || t.abandonReasons.length === 0} emptyText="Ningún recorrido abandonado">
-            {t && <BarList color="#F59E0B" items={t.abandonReasons.map(c => ({
+            {t && <BarList color={brand.orange} items={t.abandonReasons.map(c => ({
               key: c.key, label: END_REASON_LABEL[c.key] ?? c.key, value: c.count,
             }))} />}
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <ChartCard title="¿Dónde estaban al empezar?" subtitle="Según el GPS al elegir el destino" loading={loading} error={err} empty={noTrips}>
-            {t && <BarList color="#6366F1" items={t.startModes.map(c => ({
+            {t && <BarList color={brand.teal} items={t.startModes.map(c => ({
               key: c.key, label: START_MODE_LABEL[c.key] ?? c.key, value: c.count,
             }))} />}
           </ChartCard>
@@ -379,7 +380,7 @@ function RoutesTable({ routes }: { routes: TripAnalytics['routes'] }) {
             <TableRow key={`${r.origin}|${r.building}|${r.destination}`} hover>
               <TableCell>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  <Chip size="small" label={r.origin} sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 600 }} />
+                  <Chip size="small" label={r.origin} sx={{ bgcolor: brand.orange50, color: brand.orangeInk, fontWeight: 700 }} />
                   <EastRoundedIcon sx={{ fontSize: 16, color: 'text.disabled' }} aria-label="hacia" />
                   <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{r.destination}</Typography>
                   {r.building && <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{r.building}</Typography>}

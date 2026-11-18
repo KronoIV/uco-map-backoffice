@@ -1,5 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import type { SxProps, Theme } from '@mui/system';
+import { brand } from '../theme/brand';
 
 interface StatCardProps {
   title: string;
@@ -10,14 +11,14 @@ interface StatCardProps {
   sx?: SxProps<Theme>;
 }
 
-export default function StatCard({ title, value, subtitle, icon, color = '#00d084', sx }: StatCardProps) {
+export default function StatCard({ title, value, subtitle, icon, color = brand.green, sx }: StatCardProps) {
   return (
     <Box
       sx={{
         bgcolor: '#fff',
-        border: '1px solid #F1F1F1',
-        borderRadius: '18px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+        border: `1px solid ${brand.border}`,
+        borderRadius: '16px',
+        boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
         p: '20px 24px',
         display: 'flex',
         alignItems: 'flex-start',
@@ -28,7 +29,7 @@ export default function StatCard({ title, value, subtitle, icon, color = '#00d08
     >
       <Box>
         <Typography
-          sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: '6px' }}
+          sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: '6px' }}
         >
           {title}
         </Typography>

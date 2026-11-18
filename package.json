@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "check:routing": "cmp src/utils/campus-routing.ts ../uco-map-app/src/navigation/campus-routing.ts && cmp src/utils/campus-osm.ts ../uco-map-app/src/navigation/campus-osm.ts && cmp src/utils/poi-catalog.ts ../uco-map-app/src/navigation/poi-catalog.ts && cmp src/utils/navmesh-input.ts ../uco-map-app/test/eval/experiment/navmesh-input.ts && echo 'campus-routing.ts, campus-osm.ts, poi-catalog.ts y navmesh-input.ts: iguales a los de la app'",
+    "check:brand": "cmp src/theme/uco-brand.css ../uco-map-app/src/styles/uco-brand.css && cmp src/assets/uco-logo.svg ../uco-map-app/src/assets/img/uco-logo.svg && echo 'uco-brand.css y uco-logo.svg: iguales a los de la app'",
     "preview": "vite preview"
   },
   "dependencies": {

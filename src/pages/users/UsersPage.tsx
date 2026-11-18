@@ -38,6 +38,7 @@ import { useUsers, useCreateUser, useUpdateUser, useSetUserActive } from '../../
 import { resolveApiError } from '../../services/api';
 import { authService } from '../../services/authService';
 import type { AdminUser, CreateUserRequest } from '../../types';
+import { brand } from '../../theme/brand';
 
 // ── Create user dialog ────────────────────────────────────────
 interface CreateFormValues {
@@ -258,7 +259,7 @@ function ConfirmToggleDialog({
           variant="contained"
           onClick={onConfirm}
           disabled={loading}
-          sx={deactivating ? { bgcolor: '#DC2626', '&:hover': { bgcolor: '#B91C1C' } } : {}}
+          color={deactivating ? 'error' : 'primary'}
           startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : undefined}
         >
           {loading
@@ -336,9 +337,9 @@ export default function UsersPage() {
 
       <Paper
         sx={{
-          borderRadius: '18px',
-          border: '1px solid #F1F1F1',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+          borderRadius: '16px',
+          border: `1px solid ${brand.border}`,
+          boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
           overflow: 'hidden',
         }}
       >
@@ -370,7 +371,7 @@ export default function UsersPage() {
                       <Chip
                         label={u.role}
                         size="small"
-                        sx={{ bgcolor: '#ECFDF5', color: '#065F46', fontWeight: 600, fontSize: '0.7rem' }}
+                        sx={{ bgcolor: brand.green50, color: brand.greenStrong, fontWeight: 700, fontSize: '0.7rem' }}
                       />
                     </TableCell>
                     <TableCell sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>
@@ -389,10 +390,7 @@ export default function UsersPage() {
                           checked={u.active}
                           size="small"
                           onChange={() => setToggleTarget(u)}
-                          sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#2F855A' },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#2F855A' },
-                          }}
+                          inputProps={{ 'aria-label': u.active ? 'Desactivar usuario' : 'Reactivar usuario' }}
                         />
                       </Tooltip>
                     </TableCell>
@@ -408,8 +406,8 @@ export default function UsersPage() {
                             onClick={() => handleSendReset(u)}
                             disabled={!!resetStatus[u.id]}
                             sx={{
-                              color: resetStatus[u.id] === 'done' ? '#2F855A' :
-                                     resetStatus[u.id] === 'error' ? '#DC2626' :
+                              color: resetStatus[u.id] === 'done' ? brand.greenStrong :
+                                     resetStatus[u.id] === 'error' ? brand.danger :
                                      'text.secondary',
                             }}
                           >

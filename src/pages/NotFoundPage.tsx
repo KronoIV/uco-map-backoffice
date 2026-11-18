@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { Box, Button, Typography } from '@mui/material';
 import SearchOffRoundedIcon from '@mui/icons-material/SearchOffRounded';
-import logoFull from '../assets/ucomap-logo.svg';
+import ucoLogo from '../assets/uco-logo.svg';
 import { useAuth } from '../context/AuthContext';
+import { brand } from '../theme/brand';
 
 export default function NotFoundPage() {
   const { user } = useAuth();
@@ -14,34 +15,38 @@ export default function NotFoundPage() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: '#f8f9fb',
+        bgcolor: brand.bg,
         p: 3,
         textAlign: 'center',
       }}
     >
-      <Box component="img" src={logoFull} alt="UCO Map" sx={{ width: 200, mb: 5 }} />
+      {/* Logo oficial centrado sobre recuadro blanco (manual, p. 22) */}
+      <Box className="uco-plate" sx={{ height: 72, px: '18px !important', py: '12px !important', mb: 5 }}>
+        <img src={ucoLogo} alt="Universidad Católica de Oriente" />
+      </Box>
 
       <Box
         sx={{
           width: 80,
           height: 80,
-          borderRadius: '50%',
-          bgcolor: 'rgba(47,133,90,0.12)',
+          borderRadius: '22px',
+          bgcolor: brand.green50,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           mb: 3,
         }}
       >
-        <SearchOffRoundedIcon sx={{ fontSize: 40, color: '#2F855A' }} />
+        <SearchOffRoundedIcon sx={{ fontSize: 40, color: brand.green }} />
       </Box>
 
       <Typography
         variant="h1"
-        sx={{ fontSize: '5rem', fontWeight: 800, color: '#276749', lineHeight: 1, mb: 1 }}
+        sx={{ fontSize: '5rem', fontWeight: 700, color: brand.green, lineHeight: 1, mb: 1 }}
       >
         404
       </Typography>
+      <Box sx={{ width: 48, height: 5, borderRadius: 2, bgcolor: brand.yellow, mb: 2 }} />
 
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
         Página no encontrada
@@ -61,9 +66,6 @@ export default function NotFoundPage() {
             height: 44,
             px: 4,
             fontSize: '0.875rem',
-            borderRadius: 2,
-            bgcolor: '#2F855A',
-            '&:hover': { bgcolor: '#276749' },
           }}
         >
           Ir al panel principal
@@ -77,9 +79,6 @@ export default function NotFoundPage() {
             height: 44,
             px: 4,
             fontSize: '0.875rem',
-            borderRadius: 2,
-            bgcolor: '#2F855A',
-            '&:hover': { bgcolor: '#276749' },
           }}
         >
           Ir a inicio de sesión

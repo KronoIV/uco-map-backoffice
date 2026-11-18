@@ -3,6 +3,7 @@ import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import { Box, Chip, Typography } from '@mui/material';
 import type { DeviceSession } from '../../types';
 import { PLATFORM_LABEL, fmtDuration } from '../../utils/analyticsFormat';
+import { brand } from '../../theme/brand';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min → "activo ahora"
 const TODAY_MS = 24 * 60 * 60 * 1000;
@@ -10,10 +11,10 @@ const TODAY_MS = 24 * 60 * 60 * 1000;
 function statusChip(lastSeen: string) {
   const diff = Date.now() - new Date(lastSeen).getTime();
   if (diff < ACTIVE_MS)
-    return <Chip label="Activo" size="small" sx={{ bgcolor: '#D1FAE5', color: '#065F46', fontWeight: 600 }} />;
+    return <Chip label="Activo" size="small" color="success" />;
   if (diff < TODAY_MS)
-    return <Chip label="Hoy" size="small" sx={{ bgcolor: '#DBEAFE', color: '#1E40AF', fontWeight: 600 }} />;
-  return <Chip label="Inactivo" size="small" sx={{ bgcolor: '#F3F4F6', color: '#6B7280', fontWeight: 600 }} />;
+    return <Chip label="Hoy" size="small" color="info" />;
+  return <Chip label="Inactivo" size="small" sx={{ bgcolor: brand.bgMuted, color: brand.text3 }} />;
 }
 
 function fmtDate(iso: string) {
@@ -46,7 +47,7 @@ const columns: GridColDef<DeviceSession>[] = [
       <Chip
         label={PLATFORM_LABEL[value as string] ?? value ?? '—'}
         size="small"
-        sx={{ bgcolor: '#F3F4F6', color: '#374151', fontWeight: 500 }}
+        sx={{ bgcolor: brand.bgMuted, color: brand.text2, fontWeight: 700 }}
       />
     ),
   },
@@ -78,7 +79,7 @@ const columns: GridColDef<DeviceSession>[] = [
       <Chip
         label={value ? value : '—'}
         size="small"
-        sx={{ bgcolor: '#EDE9FE', color: '#5B21B6', fontWeight: 700 }}
+        sx={{ bgcolor: brand.blue50, color: brand.blue, fontWeight: 700 }}
       />
     ),
   },
@@ -136,9 +137,9 @@ export default function SessionsDataGrid({
     <Box
       sx={{
         bgcolor: '#fff',
-        border: '1px solid #F1F1F1',
-        borderRadius: '18px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+        border: `1px solid ${brand.border}`,
+        borderRadius: '16px',
+        boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
         overflow: 'hidden',
         height: 480,
       }}
@@ -163,26 +164,12 @@ export default function SessionsDataGrid({
         sx={{
           border: 'none',
           fontSize: '0.8125rem',
-          '& .MuiDataGrid-columnHeader': {
-            bgcolor: '#F8F9FB',
-            fontWeight: 600,
-            fontSize: '0.75rem',
-            color: '#6B7280',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-          },
           '& .MuiDataGrid-row': {
             cursor: 'pointer',
-            '&:hover': { bgcolor: '#FAFAFA' },
-            '&.Mui-selected': { bgcolor: '#F0FFF9 !important' },
           },
           '& .MuiDataGrid-cell': {
-            borderBottom: '1px solid #F9FAFB',
             display: 'flex',
             alignItems: 'center',
-          },
-          '& .MuiDataGrid-footerContainer': {
-            borderTop: '1px solid #F1F1F1',
           },
         }}
       />

@@ -2,6 +2,7 @@ import { Box, Paper, Skeleton, Tooltip, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
+import { brand } from '../../theme/brand';
 
 interface Props {
   title: string;
@@ -20,9 +21,9 @@ interface Props {
 
 export const cardSx = {
   bgcolor: '#fff',
-  border: '1px solid #F1F1F1',
+  border: `1px solid ${brand.border}`,
   borderRadius: '18px',
-  boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+  boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
 } as const;
 
 /** Contenedor de cada gráfico con título explicativo y estados de carga, error y sin datos. */
@@ -63,7 +64,7 @@ export function EmptyState({ icon, text, tone }: { icon: React.ReactNode; text: 
     <Box
       sx={{
         flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 1, py: 3, px: 2, textAlign: 'center', borderRadius: '12px', bgcolor: '#FAFAFA',
+        gap: 1, py: 3, px: 2, textAlign: 'center', borderRadius: '12px', bgcolor: brand.bg,
         color: tone === 'error' ? 'error.main' : 'text.secondary',
         '& svg': { fontSize: 28, opacity: 0.6 },
       }}

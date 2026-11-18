@@ -2,12 +2,23 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--uco-font);
+  background: var(--uco-bg);
+  color: var(--uco-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 :root {
   color-scheme: light;
+}
+
+/* Sin el fondo azul que Chrome pone a los campos autocompletados */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #fff inset;
+  -webkit-text-fill-color: var(--uco-text);
+  caret-color: var(--uco-text);
 }
 

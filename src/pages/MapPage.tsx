@@ -37,6 +37,7 @@ import {
 } from '../utils/campus-routing';
 import { buildingsCrossed, footprintAt, type Footprint } from '../utils/campus-osm';
 import { useCampusOsm } from '../hooks/useCampusOsm';
+import { brand } from '../theme/brand';
 
 // Fix default leaflet icons
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -63,8 +64,8 @@ function makeIcon(color: string, borderColor: string, size: number, ring = false
 const NODE_TYPE_META: Record<NodeType, { label: string; help: string; color: string; border: string; size: number }> = {
   WAYPOINT: { label: 'Punto de camino', help: 'Curva o cruce de un sendero', color: '#9CA3AF', border: '#6B7280', size: 11 },
   DOOR: { label: 'Entrada de edificio', help: 'Por donde se entra; va sobre la fachada', color: '#8B5CF6', border: '#5B21B6', size: 14 },
-  BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: '#00d084', border: '#276749', size: 18 },
-  ENTRANCE: { label: 'Entrada al campus', help: 'Portería o acceso desde la calle', color: '#3B82F6', border: '#1E40AF', size: 14 },
+  BUILDING: { label: 'Edificio', help: 'Destino de la ruta', color: brand.green, border: brand.greenDark, size: 18 },
+  ENTRANCE: { label: 'Entrada al campus', help: 'Portería o acceso desde la calle', color: brand.blue, border: '#11204a', size: 14 },
   POI: { label: 'Punto de interés', help: 'Auditorio u otro lugar que la app lista aparte', color: '#B45309', border: '#78350F', size: 14 },
 };
 const NODE_TYPES = Object.keys(NODE_TYPE_META) as NodeType[];
@@ -137,7 +138,7 @@ function PoiFields({
     </Box>
   );
 }
-const SELECTED_LOOK: NodeLook = { color: '#F59E0B', border: '#D97706', size: 18, ring: true };
+const SELECTED_LOOK: NodeLook = { color: brand.yellow, border: '#a07c00', size: 18, ring: true };
 
 const MIN_FLOOR = -5;
 const MAX_FLOOR = 60;
@@ -215,7 +216,7 @@ function MapViewControls({
       <Tooltip title={layer === 'street' ? 'Vista satelital (ESRI)' : 'Vista mapa'} placement="left">
         <IconButton
           onClick={onLayer}
-          sx={{ bgcolor: '#fff', border: '1px solid #E5E7EB', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', '&:hover': { bgcolor: '#F8F9FB' } }}
+          sx={{ bgcolor: '#fff', border: `1px solid ${brand.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', '&:hover': { bgcolor: brand.bg } }}
         >
           {layer === 'street' ? <SatelliteAltRoundedIcon sx={{ fontSize: 20 }} /> : <MapRoundedIcon sx={{ fontSize: 20 }} />}
         </IconButton>
@@ -289,7 +290,7 @@ function TypePicker({ value, onChange }: { value: NodeType; onChange: (t: NodeTy
             sx={{
               display: 'flex', alignItems: 'center', gap: 1.25, p: 1, borderRadius: '10px',
               cursor: active ? 'default' : 'pointer',
-              border: `1.5px solid ${active ? m.color : '#E5E7EB'}`,
+              border: `1.5px solid ${active ? m.color : brand.border}`,
               bgcolor: active ? `${m.color}1A` : '#fff',
               '&:hover': { borderColor: m.color },
             }}
@@ -478,7 +479,7 @@ function selectedBuildingOf(selection: Selection, nodes: GraphNode[]): string | 
 function editorEdgeLook(edge: GraphEdge, selection: Selection, selectedBuilding: string | null, crossing = false): EdgeLook {
   const selected = selection?.kind === 'edge' && selection.id === edge.id;
   const ofBuilding = !!selectedBuilding && (edge.nodeA === selectedBuilding || edge.nodeB === selectedBuilding);
-  const color = selected ? '#F59E0B' : crossing ? '#EF4444' : ofBuilding ? '#8B5CF6' : '#00d084';
+  const color = selected ? brand.yellow : crossing ? brand.danger : ofBuilding ? '#8B5CF6' : brand.green;
   return { color, width: selected || ofBuilding || crossing ? 7 : 5, opacity: 0.9 };
 }
 
@@ -572,14 +573,14 @@ function MapInteraction({
         <Marker
           position={[selection.lat, selection.lng]}
           interactive={false}
-          icon={makeIcon('#F59E0B', '#fff', 12, true)}
+          icon={makeIcon(brand.yellow, '#fff', 12, true)}
         />
       )}
 
       {fromPos && cursorPos && (
         <Polyline
           positions={[[fromPos.lat, fromPos.lng], cursorPos]}
-          pathOptions={{ color: '#F59E0B', weight: 3, opacity: 0.9, dashArray: '6 5', interactive: false }}
+          pathOptions={{ color: brand.orange, weight: 3, opacity: 0.9, dashArray: '6 5', interactive: false }}
         />
       )}
 
@@ -734,9 +735,9 @@ function UserNavPreview({
 
   const previewNodeLook = (node: GraphNode): NodeLook =>
     node.nodeId === destNodeId || node.nodeId === routeEnd
-      ? { color: '#EF4444', border: '#B91C1C', size: 20, ring: true }
+      ? { color: brand.danger, border: '#8e1c1c', size: 20, ring: true }
       : route?.nodeIds.includes(node.nodeId)
-        ? { color: '#00d084', border: '#276749', size: 14, ring: true }
+        ? { color: brand.green, border: brand.greenDark, size: 14, ring: true }
         : typeLook(node);
 
   const center: [number, number] =
@@ -750,7 +751,7 @@ function UserNavPreview({
   return (
     <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>
       {/* Map */}
-      <Box sx={{ flex: 1, borderRadius: '18px', overflow: 'hidden', border: '1px solid #F1F1F1', position: 'relative' }}>
+      <Box sx={{ flex: 1, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${brand.border}`, position: 'relative' }}>
         {/* Hint */}
         <Box
           sx={{
@@ -808,7 +809,7 @@ function UserNavPreview({
               <Polyline
                 key={edge.id}
                 positions={[[a.gps.lat, a.gps.lng], [b.gps.lat, b.gps.lng]]}
-                pathOptions={{ color: '#D1D5DB', weight: 2, opacity: 0.6 }}
+                pathOptions={{ color: brand.borderStrong, weight: 2, opacity: 0.6 }}
               />
             );
           })}
@@ -817,7 +818,7 @@ function UserNavPreview({
           {routePositions.length >= 2 && (
             <Polyline
               positions={routePositions}
-              pathOptions={{ color: '#00d084', weight: 5, opacity: 0.95, dashArray: '10 6' }}
+              pathOptions={{ color: brand.green, weight: 5, opacity: 0.95, dashArray: '10 6' }}
             />
           )}
 
@@ -863,16 +864,16 @@ function UserNavPreview({
       <Paper
         sx={{
           width: 300,
-          borderRadius: '18px',
-          border: '1px solid #F1F1F1',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+          borderRadius: '16px',
+          border: `1px solid ${brand.border}`,
+          boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
         }}
       >
         {/* Header */}
-        <Box sx={{ p: 2.5, borderBottom: '1px solid #F1F1F1' }}>
+        <Box sx={{ p: 2.5, borderBottom: `1px solid ${brand.border}` }}>
           <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 0.5 }}>
             Vista de usuario
           </Typography>
@@ -940,8 +941,8 @@ function UserNavPreview({
           {simPos ? (
             <Box
               sx={{
-                bgcolor: '#F0FFF9',
-                border: '1px solid #A7F3D0',
+                bgcolor: brand.green50,
+                border: `1px solid ${brand.green100}`,
                 borderRadius: '10px',
                 px: 1.5, py: 1,
                 mb: 2,
@@ -951,14 +952,14 @@ function UserNavPreview({
               }}
             >
               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#4285F4', flexShrink: 0 }} />
-              <Typography sx={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#374151' }}>
+              <Typography sx={{ fontFamily: 'monospace', fontSize: '0.7rem', color: brand.text2 }}>
                 {simPos.lat.toFixed(5)}, {simPos.lng.toFixed(5)}
               </Typography>
             </Box>
           ) : (
             <Box
               sx={{
-                bgcolor: '#F8F9FB',
+                bgcolor: brand.bg,
                 borderRadius: '10px',
                 px: 1.5, py: 1,
                 mb: 2,
@@ -987,22 +988,22 @@ function UserNavPreview({
               <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                 <Box
                   sx={{
-                    flex: 1, bgcolor: '#F0FFF9', borderRadius: '12px', p: 1.5, textAlign: 'center',
-                    border: '1px solid #A7F3D0',
+                    flex: 1, bgcolor: brand.green50, borderRadius: '12px', p: 1.5, textAlign: 'center',
+                    border: `1px solid ${brand.green100}`,
                   }}
                 >
-                  <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: '#00d084', lineHeight: 1 }}>
+                  <Typography sx={{ fontSize: '1.1rem', fontWeight: 700, color: brand.greenStrong, lineHeight: 1 }}>
                     {formatDistance(route.totalDist)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">Distancia</Typography>
                 </Box>
                 <Box
                   sx={{
-                    flex: 1, bgcolor: '#EFF6FF', borderRadius: '12px', p: 1.5, textAlign: 'center',
-                    border: '1px solid #BFDBFE',
+                    flex: 1, bgcolor: brand.blue50, borderRadius: '12px', p: 1.5, textAlign: 'center',
+                    border: '1px solid rgba(29, 52, 117, 0.2)',
                   }}
                 >
-                  <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: '#3B82F6', lineHeight: 1 }}>
+                  <Typography sx={{ fontSize: '1.1rem', fontWeight: 700, color: brand.blue, lineHeight: 1 }}>
                     {formatEta(route.totalDist)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">A pie</Typography>
@@ -1017,7 +1018,7 @@ function UserNavPreview({
                 sx={{
                   maxHeight: 200,
                   overflowY: 'auto',
-                  bgcolor: '#F8F9FB',
+                  bgcolor: brand.bg,
                   borderRadius: '12px',
                   p: 1,
                 }}
@@ -1035,13 +1036,13 @@ function UserNavPreview({
                         <Box
                           sx={{
                             width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                            bgcolor: isLast ? '#EF4444' : isFirst ? '#4285F4' : '#00d084',
+                            bgcolor: isLast ? brand.danger : isFirst ? '#4285F4' : brand.green,
                             border: '2px solid #fff',
                             boxShadow: '0 0 0 1.5px currentColor',
                           }}
                         />
                         {!isLast && (
-                          <Box sx={{ width: 1.5, height: 14, bgcolor: '#D1D5DB' }} />
+                          <Box sx={{ width: 1.5, height: 14, bgcolor: brand.borderStrong }} />
                         )}
                       </Box>
                       <Box>
@@ -1061,7 +1062,7 @@ function UserNavPreview({
                         <Chip
                           label="Destino"
                           size="small"
-                          sx={{ ml: 'auto', bgcolor: '#FEE2E2', color: '#B91C1C', fontSize: '0.65rem' }}
+                          sx={{ ml: 'auto', bgcolor: brand.dangerBg, color: brand.danger, fontSize: '0.65rem' }}
                         />
                       )}
                     </Box>
@@ -1075,7 +1076,7 @@ function UserNavPreview({
             </Alert>
           ) : (
             <Box sx={{ textAlign: 'center', py: 3 }}>
-              <DirectionsWalkRoundedIcon sx={{ fontSize: 36, color: '#D1D5DB', mb: 1 }} />
+              <DirectionsWalkRoundedIcon sx={{ fontSize: 36, color: brand.borderStrong, mb: 1 }} />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 Selecciona un destino y una posición de inicio para calcular la ruta con el mismo algoritmo de la app
               </Typography>
@@ -1085,12 +1086,12 @@ function UserNavPreview({
 
         {/* Reset */}
         {(simPos || route) && (
-          <Box sx={{ p: 2, borderTop: '1px solid #F1F1F1' }}>
+          <Box sx={{ p: 2, borderTop: `1px solid ${brand.border}` }}>
             <Button
               fullWidth
               variant="outlined"
               size="small"
-              sx={{ borderRadius: '100px', textTransform: 'none', color: 'text.secondary', borderColor: '#E5E7EB' }}
+              sx={{ textTransform: 'none', color: 'text.secondary', borderColor: brand.border }}
               onClick={() => { setSimPos(null); setDestNodeId(''); }}
             >
               Reiniciar simulación
@@ -1438,9 +1439,9 @@ export default function MapPage() {
         <Box
           sx={{
             flex: 1,
-            borderRadius: '18px',
+            borderRadius: '16px',
             overflow: 'hidden',
-            border: '1px solid #F1F1F1',
+            border: `1px solid ${brand.border}`,
             position: 'relative',
           }}
         >
@@ -1535,15 +1536,15 @@ export default function MapPage() {
         <Paper
           sx={{
             width: 300,
-            borderRadius: '18px',
-            border: '1px solid #F1F1F1',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+            borderRadius: '16px',
+            border: `1px solid ${brand.border}`,
+            boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
           }}
         >
-          <Box sx={{ p: 2, borderBottom: '1px solid #F1F1F1', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ p: 2, borderBottom: `1px solid ${brand.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
             {selectedNode && (
               <TypeSwatch type={selectedNode.nodeType} poiType={selectedNode.poiType} size={14} />
             )}
@@ -1607,14 +1608,14 @@ export default function MapPage() {
                         onClick={() => selectNode(b.id, true)}
                         sx={{
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
-                          px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', '&:hover': { bgcolor: '#F8F9FB' },
+                          px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', '&:hover': { bgcolor: brand.green50 },
                         }}
                       >
                         <Typography variant="body2" sx={{ fontSize: '0.8rem' }} noWrap>{b.label}</Typography>
                         <Chip
                           size="small"
                           label={b.doors === 0 ? 'Sin entradas' : b.broken > 0 ? `${b.broken} sin unir` : `${b.doors} entrada${b.doors > 1 ? 's' : ''}`}
-                          sx={{ fontSize: '0.65rem', height: 20, bgcolor: pending ? '#FEF3C7' : '#EDE9FE', color: pending ? '#92400E' : '#5B21B6' }}
+                          sx={{ fontSize: '0.65rem', height: 20, bgcolor: pending ? brand.orange50 : '#EDE9FE', color: pending ? brand.orangeInk : '#5B21B6' }}
                         />
                       </Box>
                     );
@@ -1644,7 +1645,7 @@ export default function MapPage() {
                             setSelection({ kind: 'edge', id: c.edge.id, ...c.at });
                             setFocus(f => ({ ...c.at, n: (f?.n ?? 0) + 1 }));
                           }}
-                          sx={{ px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', '&:hover': { bgcolor: '#FEF2F2' } }}
+                          sx={{ px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', '&:hover': { bgcolor: brand.dangerBg } }}
                         >
                           <b>{nodeName(findNode(c.edge.nodeA))} – {nodeName(findNode(c.edge.nodeB))}</b> cruza {c.building} ({Math.round(c.meters)} m)
                         </Box>
@@ -1653,7 +1654,7 @@ export default function MapPage() {
                         <Box
                           key={d.node.nodeId}
                           onClick={() => selectNode(d.node.nodeId, true)}
-                          sx={{ px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', '&:hover': { bgcolor: '#FEF2F2' } }}
+                          sx={{ px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', '&:hover': { bgcolor: brand.dangerBg } }}
                         >
                           <b>{nodeName(d.node)}</b> queda {Math.round(d.depth)} m dentro de {d.building}: arrástrala a la fachada
                         </Box>

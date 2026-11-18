@@ -8,6 +8,7 @@ import { useMultiSetUsage, useUpdateMultiSetUsage } from '../hooks/useMultiSetUs
 import { resolveApiError } from '../services/api';
 import { fmtDateTime, fmtNumber } from '../utils/analyticsFormat';
 import type { MultiSetPlan, MultiSetUsage } from '../types';
+import { brand } from '../theme/brand';
 
 const PLANS: Record<MultiSetPlan, { label: string; limit: number; monthly: boolean }> = {
   FREE:   { label: 'Free — 1.000 llamadas en total', limit: 1000, monthly: false },
@@ -128,7 +129,7 @@ export default function MultiSetUsageCard({ onMessage }: { onMessage: (msg: stri
   const text = u && statusText(u);
 
   return (
-    <Paper sx={{ borderRadius: '18px', border: '1px solid #F1F1F1', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', p: 3 }}>
+    <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', p: 3 }}>
       <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>Cupo de MultiSet (guía con cámara)</Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
         Estimación con las llamadas que informa la app en cada recorrido y las que hace el servidor.

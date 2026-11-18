@@ -1,0 +1,175 @@
+/* Identidad visual UCO (Manual de Identidad 2026), compartida por la app y el admin.
+   Copia idéntica en uco-map-app/src/styles y uco-map-admin/src/theme: verificar con `npm run check:brand` del admin. */
+
+/* Nimbus Sans: tipografía institucional. Si no está instalada se usa TeX Gyre Heros, la versión libre
+   (GUST Font License) de URW Nimbus Sans L; mismas formas y métricas. */
+@font-face {
+	font-family: 'TeX Gyre Heros';
+	src: url('../assets/fonts/texgyreheros-regular.otf') format('opentype');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'TeX Gyre Heros';
+	src: url('../assets/fonts/texgyreheros-italic.otf') format('opentype');
+	font-weight: 400;
+	font-style: italic;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'TeX Gyre Heros';
+	src: url('../assets/fonts/texgyreheros-bold.otf') format('opentype');
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'TeX Gyre Heros';
+	src: url('../assets/fonts/texgyreheros-bolditalic.otf') format('opentype');
+	font-weight: 700;
+	font-style: italic;
+	font-display: swap;
+}
+
+:root {
+	/* Paleta principal */
+	--uco-green: #008b50;
+	--uco-green-rgb: 0, 139, 80;
+	--uco-yellow: #ffca00;
+	--uco-yellow-rgb: 255, 202, 0;
+
+	/* Colores complementarios */
+	--uco-blue: #1d3475;
+	--uco-blue-rgb: 29, 52, 117;
+	--uco-green-dark: #024426;
+	--uco-green-dark-rgb: 2, 68, 38;
+	--uco-olive: #c1c12f;
+	--uco-teal: #04b5ac;
+	--uco-teal-rgb: 4, 181, 172;
+	--uco-orange: #e28210;
+	--uco-orange-rgb: 226, 130, 16;
+	--uco-beige: #f9ead4;
+
+	/* Tonalidades derivadas (el manual permite tonos similares). Texto/botones verdes: AA sobre blanco */
+	--uco-green-strong: #007d48;
+	--uco-green-hover: #006b3d;
+	--uco-green-50: #ebf6f0;
+	--uco-green-100: #d3ecdf;
+	--uco-green-200: #a9d9c0;
+	--uco-yellow-50: #fff8dc;
+	--uco-yellow-ink: #6e5600;
+	--uco-beige-50: #fdf7ee;
+	--uco-blue-50: #eceff7;
+	--uco-teal-50: #e6f7f6;
+	--uco-orange-50: #fdf1e3;
+	--uco-orange-ink: #9a5400;
+
+	/* Neutros: negro institucional al 90 % y grises cálidos */
+	--uco-ink: #1e1f1c;
+	--uco-text: #262a27;
+	--uco-text-2: #454b47;
+	--uco-text-3: #646b67;
+	--uco-text-4: #8e9590;
+	--uco-surface: #ffffff;
+	--uco-bg: #f6f7f5;
+	--uco-bg-muted: #eef1ee;
+	--uco-border: #e3e7e4;
+	--uco-border-strong: #cfd5d1;
+
+	/* Estados */
+	--uco-success: #007d48;
+	--uco-success-bg: #ebf6f0;
+	--uco-warning: #9a5400;
+	--uco-warning-bg: #fdf1e3;
+	--uco-danger: #c62828;
+	--uco-danger-bg: #fdecec;
+	--uco-info: #1d3475;
+	--uco-info-bg: #eceff7;
+
+	/* Tipografía */
+	--uco-font: 'Nimbus Sans', 'Nimbus Sans L', 'TeX Gyre Heros', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+
+	/* Forma: el símbolo es un cuadrado de ángulos redondeados */
+	--uco-radius-sm: 8px;
+	--uco-radius-md: 12px;
+	--uco-radius-lg: 16px;
+	--uco-radius-xl: 22px;
+
+	/* Sombras discretas; la del logo es la «sombra paralela gris clara» del manual */
+	--uco-shadow-xs: 0 1px 2px rgba(30, 31, 28, 0.05);
+	--uco-shadow-sm: 0 2px 8px rgba(30, 31, 28, 0.06);
+	--uco-shadow-md: 0 6px 18px rgba(30, 31, 28, 0.08), 0 1px 3px rgba(30, 31, 28, 0.05);
+	--uco-shadow-lg: 0 16px 40px rgba(30, 31, 28, 0.14), 0 3px 8px rgba(30, 31, 28, 0.06);
+	--uco-shadow-plate: 0 3px 12px rgba(0, 0, 0, 0.12);
+
+	--uco-focus-ring: 0 0 0 3px rgba(var(--uco-green-rgb), 0.28);
+
+	/* Motivo de las portadas del manual: cuadrados redondeados a 45° sobre el verde */
+	--uco-motif: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='220' viewBox='0 0 320 220'%3E%3Cg fill='%23fff'%3E%3Crect x='190' y='-70' width='150' height='150' rx='26' transform='rotate(45 265 5)' opacity='.07'/%3E%3Crect x='225' y='95' width='110' height='110' rx='20' transform='rotate(45 280 150)' opacity='.05'/%3E%3Crect x='-40' y='130' width='120' height='120' rx='22' transform='rotate(45 20 190)' opacity='.04'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Logo sobre recuadro blanco con borde redondeado y sombra gris clara (recomendación digital del manual) */
+.uco-plate {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px 12px;
+	border-radius: var(--uco-radius-md);
+	background: #fff;
+	box-shadow: var(--uco-shadow-plate);
+}
+
+.uco-plate img {
+	display: block;
+	height: 100%;
+	width: auto;
+}
+
+/* Logo + nombre del producto, separados como el manual indica para las dependencias */
+.uco-signature {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	color: var(--uco-ink);
+}
+
+.uco-signature-logo {
+	display: block;
+	height: 34px;
+	width: auto;
+	flex-shrink: 0;
+}
+
+.uco-signature-divider {
+	align-self: stretch;
+	width: 1px;
+	background: var(--uco-border-strong);
+}
+
+.uco-signature-name {
+	font-family: var(--uco-font);
+	font-size: 15px;
+	font-weight: 400;
+	line-height: 1.15;
+	color: rgba(0, 0, 0, 0.9);
+	white-space: nowrap;
+}
+
+.uco-signature-name strong {
+	display: block;
+	font-weight: 700;
+	color: var(--uco-green);
+}
+
+/* Filete amarillo bajo títulos, como en las portadas del manual */
+.uco-rule {
+	display: block;
+	width: 44px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--uco-yellow);
+}

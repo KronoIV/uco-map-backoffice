@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
+import { brand } from '../../../theme/brand';
 
 export interface TrendSeries {
   name: string;
@@ -79,14 +80,14 @@ export default function TrendChart({ labels, series, height = 220, format = n =>
         </defs>
         {[0, 0.25, 0.5, 0.75, 1].map(t => (
           <g key={t}>
-            <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y(max * t)} y2={y(max * t)} stroke="#F1F1F1" />
-            <text x={PAD.left - 6} y={y(max * t) + 4} textAnchor="end" fontSize="10" fill="#9CA3AF">
+            <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y(max * t)} y2={y(max * t)} stroke={brand.border} />
+            <text x={PAD.left - 6} y={y(max * t) + 4} textAnchor="end" fontSize="10" fill={brand.text3}>
               {format(max * t)}
             </text>
           </g>
         ))}
         {labels.map((l, i) => (i % labelEvery === 0 || i === n - 1) && (
-          <text key={l + i} x={x(i)} y={height - 6} textAnchor="middle" fontSize="10" fill="#9CA3AF">{l}</text>
+          <text key={l + i} x={x(i)} y={height - 6} textAnchor="middle" fontSize="10" fill={brand.text3}>{l}</text>
         ))}
         {series[0] && n > 1 && (
           <path d={`${path(series[0].values)} L${x(n - 1)},${y(0)} L${x(0)},${y(0)} Z`} fill={`url(#${gradientId})`} />
@@ -100,7 +101,7 @@ export default function TrendChart({ labels, series, height = 220, format = n =>
         {n === 1 && series.map(s => <circle key={s.name} cx={x(0)} cy={y(s.values[0])} r={4} fill={s.color} />)}
         {hover != null && (
           <g>
-            <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + innerH} stroke="#D1D5DB" strokeDasharray="3 3" />
+            <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + innerH} stroke={brand.borderStrong} strokeDasharray="3 3" />
             {series.map(s => <circle key={s.name} cx={x(hover)} cy={y(s.values[hover])} r={4} fill="#fff" stroke={s.color} strokeWidth={2} />)}
           </g>
         )}
@@ -111,7 +112,7 @@ export default function TrendChart({ labels, series, height = 220, format = n =>
             position: 'absolute', top: 28, pointerEvents: 'none',
             left: `${(x(hover) / WIDTH) * 100}%`,
             transform: x(hover) > WIDTH * 0.7 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)',
-            bgcolor: '#111827', color: '#fff', borderRadius: '10px', px: 1.25, py: 0.75, boxShadow: 3, minWidth: 120,
+            bgcolor: brand.ink, color: '#fff', borderRadius: '10px', px: 1.25, py: 0.75, boxShadow: 3, minWidth: 120,
           }}
         >
           <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, mb: 0.25 }}>{labels[hover]}</Typography>

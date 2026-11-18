@@ -1,4 +1,5 @@
 import { Box, Typography } from '@mui/material';
+import { brand } from '../../../theme/brand';
 
 export interface DonutSegment {
   label: string;
@@ -24,7 +25,7 @@ export default function Donut({ segments, centerValue, centerLabel, size = 150 }
       <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
         <svg viewBox="0 0 100 100" width={size} height={size} role="img"
              aria-label={segments.map(s => `${s.label}: ${s.value}`).join(', ')}>
-          <circle cx="50" cy="50" r={r} fill="none" stroke="#F3F4F6" strokeWidth="14" />
+          <circle cx="50" cy="50" r={r} fill="none" stroke={brand.bgMuted} strokeWidth="14" />
           {total > 0 && segments.map(s => {
             const len = (s.value / total) * c;
             const el = (

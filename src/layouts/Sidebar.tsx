@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import logoFull from '../assets/ucomap-logo-compact-white.svg';
-import logoShield from '../assets/ucomap-mark.svg';
+import ucoLogo from '../assets/uco-logo.svg';
+import { brand } from '../theme/brand';
 import {
   Box,
   List,
@@ -23,7 +23,7 @@ import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import { useAuth } from '../context/AuthContext';
 
-const SIDEBAR_EXPANDED = 230;
+const SIDEBAR_EXPANDED = 236;
 const SIDEBAR_COLLAPSED = 64;
 
 const navItems = [
@@ -69,12 +69,12 @@ export default function Sidebar() {
           px: expanded ? '12px' : '10px',
           justifyContent: expanded ? 'flex-start' : 'center',
           position: 'relative',
-          bgcolor: active ? 'rgba(255,255,255,0.16)' : 'transparent',
+          bgcolor: active ? 'rgba(255,255,255,0.18)' : 'transparent',
           '&:hover': {
-            bgcolor: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+            bgcolor: active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)',
           },
           '&::before': active
-            ? { content: '""', position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 2, bgcolor: '#FFD43B' }
+            ? { content: '""', position: 'absolute', left: 0, top: 8, bottom: 8, width: 4, borderRadius: 2, bgcolor: brand.yellow }
             : undefined,
         }}
       >
@@ -82,7 +82,7 @@ export default function Sidebar() {
           sx={{
             minWidth: 0,
             mr: expanded ? '10px' : 0,
-            color: active ? '#fff' : 'rgba(255,255,255,0.75)',
+            color: active ? '#fff' : 'rgba(255,255,255,0.8)',
           }}
         >
           {item.icon}
@@ -94,8 +94,8 @@ export default function Sidebar() {
               primary: {
                 sx: {
                   fontSize: '0.8125rem',
-                  fontWeight: active ? 600 : 400,
-                  color: active ? '#fff' : 'rgba(255,255,255,0.86)',
+                  fontWeight: active ? 700 : 400,
+                  color: active ? '#fff' : 'rgba(255,255,255,0.92)',
                 },
               },
             }}
@@ -120,7 +120,9 @@ export default function Sidebar() {
         width,
         minWidth: width,
         height: '100vh',
-        background: 'linear-gradient(180deg, #2E7D58 0%, #27694A 100%)',
+        // Verde institucional; se oscurece apenas hacia abajo para que el texto blanco cumpla contraste AA
+        background: `linear-gradient(180deg, ${brand.green} 0%, ${brand.greenStrong} 28%, ${brand.greenHover} 100%)`,
+        color: '#fff',
         display: 'flex',
         flexDirection: 'column',
         transition: 'width 0.2s ease, min-width 0.2s ease',
@@ -130,82 +132,86 @@ export default function Sidebar() {
         zIndex: 100,
       }}
     >
-      {/* Logo area */}
+      {/* Motivo del manual: cuadrado redondeado a 45° */}
       <Box
+        aria-hidden
         sx={{
-          height: 64,
-          display: 'flex',
-          alignItems: 'center',
-          px: expanded ? '16px' : 0,
-          justifyContent: expanded ? 'space-between' : 'center',
-          borderBottom: expanded ? '1px solid rgba(255,255,255,0.12)' : 'none',
+          position: 'absolute', width: 220, height: 220, bottom: -90, right: -110,
+          borderRadius: '48px', transform: 'rotate(45deg)', bgcolor: 'rgba(255,255,255,0.06)', pointerEvents: 'none',
         }}
-      >
-        {expanded ? (
-          <>
-            <Box
-              component="img"
-              src={logoFull}
-              alt="UCO Map"
-              sx={{ height: 36, width: 'auto', display: 'block' }}
-            />
-            <ListItemButton
-              onClick={() => setExpanded(false)}
-              sx={{
-                p: '4px',
-                minWidth: 0,
-                borderRadius: '8px',
-                color: 'rgba(255,255,255,0.7)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                flexShrink: 0,
-              }}
-            >
-              <CloseRoundedIcon sx={{ fontSize: 20 }} />
-            </ListItemButton>
-          </>
-        ) : (
-          <Box
-            component="img"
-            src={logoShield}
-            alt="UCO Map"
-            sx={{ height: 36, width: 36, display: 'block' }}
-          />
-        )}
-      </Box>
+      />
 
-      {/* Toggle button when collapsed */}
-      {!expanded && (
+      {/* Logo institucional sin modificar, sobre recuadro blanco (manual, p. 22), y nombre del producto */}
+      {expanded ? (
+        <Box sx={{ px: '14px', pt: '14px', pb: '14px', borderBottom: '1px solid rgba(255,255,255,0.16)' }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+            <Box className="uco-plate" sx={{ height: 52, px: '10px !important', py: '7px !important' }}>
+              <img src={ucoLogo} alt="Universidad Católica de Oriente" />
+            </Box>
+            <Tooltip title="Contraer menú" placement="right" arrow>
+              <ListItemButton
+                onClick={() => setExpanded(false)}
+                aria-label="Contraer menú"
+                sx={{
+                  p: '4px',
+                  m: 0,
+                  minWidth: 0,
+                  borderRadius: '8px',
+                  color: 'rgba(255,255,255,0.85)',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' },
+                  justifyContent: 'center',
+                  width: 30,
+                  height: 30,
+                  flexShrink: 0,
+                }}
+              >
+                <CloseRoundedIcon sx={{ fontSize: 18 }} />
+              </ListItemButton>
+            </Tooltip>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: '12px' }}>
+            <Box sx={{ width: 4, height: 28, borderRadius: 2, bgcolor: brand.yellow, flexShrink: 0 }} />
+            <Box sx={{ lineHeight: 1.15 }}>
+              <Box sx={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>UCO Map</Box>
+              <Box sx={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.9)' }}>Panel de administración</Box>
+            </Box>
+          </Box>
+        </Box>
+      ) : (
         <Box
           sx={{
             display: 'flex',
             justifyContent: 'center',
-            py: '10px',
-            borderBottom: '1px solid rgba(255,255,255,0.12)',
+            alignItems: 'center',
+            height: 64,
+            borderBottom: '1px solid rgba(255,255,255,0.16)',
           }}
         >
-          <ListItemButton
-            onClick={() => setExpanded(true)}
-            sx={{
-              p: '6px',
-              minWidth: 0,
-              borderRadius: '8px',
-              color: 'rgba(255,255,255,0.7)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
-              justifyContent: 'center',
-              width: 36,
-              height: 36,
-            }}
-          >
-            <MenuRoundedIcon sx={{ fontSize: 20 }} />
-          </ListItemButton>
+          <Tooltip title="Expandir menú" placement="right" arrow>
+            <ListItemButton
+              onClick={() => setExpanded(true)}
+              aria-label="Expandir menú"
+              sx={{
+                p: '6px',
+                m: 0,
+                minWidth: 0,
+                borderRadius: '8px',
+                color: '#fff',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                flexGrow: 0,
+              }}
+            >
+              <MenuRoundedIcon sx={{ fontSize: 20 }} />
+            </ListItemButton>
+          </Tooltip>
         </Box>
       )}
 
       {/* Nav items */}
-      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', pt: '8px' }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', pt: '10px', position: 'relative' }}>
         <List disablePadding>
           {navItems.map(item => (
             <NavItem key={item.path} item={item} />
@@ -213,10 +219,10 @@ export default function Sidebar() {
         </List>
       </Box>
 
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.12)' }} />
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.16)' }} />
 
       {/* Bottom items */}
-      <Box sx={{ pb: '8px', pt: '4px' }}>
+      <Box sx={{ pb: '8px', pt: '4px', position: 'relative' }}>
         <List disablePadding>
           {bottomItems.map(item => (
             <NavItem key={item.path} item={item} />
@@ -234,15 +240,15 @@ export default function Sidebar() {
                 mb: '2px',
                 py: '8px',
                 px: '12px',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
               }}
             >
-              <ListItemIcon sx={{ minWidth: 0, mr: '10px', color: 'rgba(255,255,255,0.75)' }}>
+              <ListItemIcon sx={{ minWidth: 0, mr: '10px', color: 'rgba(255,255,255,0.8)' }}>
                 <LogoutRoundedIcon fontSize="small" />
               </ListItemIcon>
               <ListItemText
                 primary="Cerrar sesión"
-                slotProps={{ primary: { sx: { fontSize: '0.8125rem', fontWeight: 400, color: 'rgba(255,255,255,0.86)' } } }}
+                slotProps={{ primary: { sx: { fontSize: '0.8125rem', fontWeight: 400, color: 'rgba(255,255,255,0.92)' } } }}
               />
             </ListItemButton>
           </Tooltip>
@@ -257,10 +263,10 @@ export default function Sidebar() {
                 py: '8px',
                 px: '10px',
                 justifyContent: 'center',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
               }}
             >
-              <ListItemIcon sx={{ minWidth: 0, color: 'rgba(255,255,255,0.75)' }}>
+              <ListItemIcon sx={{ minWidth: 0, color: 'rgba(255,255,255,0.8)' }}>
                 <LogoutRoundedIcon fontSize="small" />
               </ListItemIcon>
             </ListItemButton>

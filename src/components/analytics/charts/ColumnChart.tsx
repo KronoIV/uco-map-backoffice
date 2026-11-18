@@ -1,4 +1,5 @@
 import { Box, Tooltip, Typography } from '@mui/material';
+import { brand } from '../../../theme/brand';
 
 interface Props {
   items: { label: string; value: number }[];
@@ -11,7 +12,7 @@ interface Props {
 }
 
 /** Distribución en columnas (histograma). */
-export default function ColumnChart({ items, color = '#6366F1', height = 160, describe, highlight }: Props) {
+export default function ColumnChart({ items, color = brand.blue, height = 160, describe, highlight }: Props) {
   const max = Math.max(1, ...items.map(i => i.value));
   const total = items.reduce((s, i) => s + i.value, 0);
   return (

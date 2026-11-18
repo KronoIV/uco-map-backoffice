@@ -64,12 +64,13 @@ export const PLATFORM_LABEL: Record<string, string> = {
 
 export const PLATFORM_OPTIONS = ['iOS', 'Android', 'Desktop-Windows', 'Desktop-Mac', 'Desktop-Linux'];
 
+// Paleta institucional UCO (theme/brand.ts) para distinguir plataformas
 export const PLATFORM_COLOR: Record<string, string> = {
-  iOS: '#4B5563',
-  Android: '#3DDC84',
-  'Desktop-Windows': '#0078D4',
-  'Desktop-Mac': '#A1A1AA',
-  'Desktop-Linux': '#F59E0B',
+  iOS: '#454b47',
+  Android: '#008b50',
+  'Desktop-Windows': '#1d3475',
+  'Desktop-Mac': '#8e9590',
+  'Desktop-Linux': '#e28210',
 };
 
 /** Funciones de la app según lo que registra (sessionTracker.trackView). */

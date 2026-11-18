@@ -1,0 +1,40 @@
+// Identidad visual UCO (Manual de Identidad 2026) para MUI y estilos en línea.
+// Mismos valores que las variables de uco-brand.css (compartido con la app).
+export const brand = {
+  green: '#008b50',
+  greenStrong: '#007d48',
+  greenHover: '#006b3d',
+  greenDark: '#024426',
+  green50: '#ebf6f0',
+  green100: '#d3ecdf',
+  green200: '#a9d9c0',
+  yellow: '#ffca00',
+  yellow50: '#fff8dc',
+  yellowInk: '#6e5600',
+  blue: '#1d3475',
+  blue50: '#eceff7',
+  olive: '#c1c12f',
+  teal: '#04b5ac',
+  teal50: '#e6f7f6',
+  orange: '#e28210',
+  orange50: '#fdf1e3',
+  orangeInk: '#9a5400',
+  beige: '#f9ead4',
+  beige50: '#fdf7ee',
+  ink: '#1e1f1c',
+  text: '#262a27',
+  text2: '#454b47',
+  text3: '#646b67',
+  text4: '#8e9590',
+  surface: '#ffffff',
+  bg: '#f6f7f5',
+  bgMuted: '#eef1ee',
+  border: '#e3e7e4',
+  borderStrong: '#cfd5d1',
+  danger: '#c62828',
+  dangerBg: '#fdecec',
+  font: "'Nimbus Sans', 'Nimbus Sans L', 'TeX Gyre Heros', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+} as const;
+
+/** Serie de colores para gráficos: verde institucional primero, luego los complementarios del manual. */
+export const chartPalette = [brand.green, brand.blue, brand.yellow, brand.teal, brand.orange, brand.olive, brand.greenDark] as const;

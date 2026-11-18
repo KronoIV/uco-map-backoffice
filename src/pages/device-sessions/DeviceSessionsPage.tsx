@@ -15,6 +15,7 @@ import {
   useDeviceSessions, useRecentSessions, useSessionStats, useSessionStream,
 } from '../../hooks/useDeviceSessions';
 import type { DeviceSession, SessionStatusFilter } from '../../types';
+import { brand } from '../../theme/brand';
 
 const ACTIVE_MS = 10 * 60 * 1000; // 10 min
 
@@ -93,20 +94,20 @@ export default function DeviceSessionsPage() {
               size="small"
               sx={{
                 '& .MuiToggleButton-root': {
-                  border: '1px solid #E5E7EB',
+                  border: `1px solid ${brand.border}`,
                   borderRadius: '100px !important',
                   px: 1.5,
                   py: '4px',
                   fontSize: '0.75rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   textTransform: 'none',
                   color: 'text.secondary',
                   mx: '2px',
                   '&.Mui-selected': {
-                    bgcolor: '#2F855A',
+                    bgcolor: brand.greenStrong,
                     color: '#fff',
-                    borderColor: '#2F855A',
-                    '&:hover': { bgcolor: '#276749' },
+                    borderColor: brand.greenStrong,
+                    '&:hover': { bgcolor: brand.greenHover },
                   },
                 },
               }}
@@ -129,10 +130,10 @@ export default function DeviceSessionsPage() {
               <Chip
                 label={liveConnected ? 'En vivo' : 'Reconectando…'}
                 size="small"
-                icon={<Box component="span" sx={{ display:'inline-block', width:6, height:6, borderRadius:'50%', bgcolor: liveConnected ? '#065F46' : '#92400E', ml:'6px !important', animation:'pulse 1.5s infinite' }} />}
+                icon={<Box component="span" sx={{ display:'inline-block', width:6, height:6, borderRadius:'50%', bgcolor: liveConnected ? brand.greenStrong : brand.orangeInk, ml:'6px !important', animation:'pulse 1.5s infinite' }} />}
                 sx={{
-                  bgcolor: liveConnected ? '#D1FAE5' : '#FEF3C7',
-                  color: liveConnected ? '#065F46' : '#92400E',
+                  bgcolor: liveConnected ? brand.green50 : brand.orange50,
+                  color: liveConnected ? brand.greenStrong : brand.orangeInk,
                   fontSize: '0.7rem',
                   '& .MuiChip-icon': { ml: 0 },
                   '@keyframes pulse': {
@@ -145,11 +146,12 @@ export default function DeviceSessionsPage() {
                 <IconButton
                   size="small"
                   onClick={refreshAll}
+                  aria-label="Refrescar ahora"
                   sx={{
-                    border: '1px solid #E5E7EB',
+                    border: `1px solid ${brand.border}`,
                     borderRadius: '8px',
                     color: 'text.secondary',
-                    '&:hover': { bgcolor: '#F9FAFB' },
+                    '&:hover': { bgcolor: brand.bg },
                   }}
                 >
                   <RefreshRoundedIcon sx={{ fontSize: 18 }} />
@@ -184,14 +186,14 @@ export default function DeviceSessionsPage() {
             {/* Recent activity timeline */}
             <Paper
               sx={{
-                borderRadius: '18px',
-                border: '1px solid #F1F1F1',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                borderRadius: '16px',
+                border: `1px solid ${brand.border}`,
+                boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)',
                 p: 3,
                 flex: 1,
               }}
             >
-              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 2 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 2 }}>
                 Actividad reciente
               </Typography>
               {loadingRecent ? (
@@ -214,7 +216,7 @@ export default function DeviceSessionsPage() {
                           px: 1,
                           borderRadius: '8px',
                           cursor: 'pointer',
-                          '&:hover': { bgcolor: '#F9FAFB' },
+                          '&:hover': { bgcolor: brand.green50 },
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -223,7 +225,7 @@ export default function DeviceSessionsPage() {
                               width: 8,
                               height: 8,
                               borderRadius: '50%',
-                              bgcolor: isActive ? '#00d084' : '#D1D5DB',
+                              bgcolor: isActive ? brand.green : brand.borderStrong,
                               flexShrink: 0,
                             }}
                           />

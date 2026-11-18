@@ -10,11 +10,13 @@ import {
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { useAuth } from '../context/AuthContext';
+import { brand } from '../theme/brand';
 
 const routeMap: Record<string, string[]> = {
   '/': ['Dashboard'],
   '/map': ['Mapa'],
   '/campus': ['Campus'],
+  '/events': ['Eventos'],
   '/settings': ['Configuración'],
   '/sessions': ['Actividad'],
   '/users': ['Usuarios'],
@@ -46,7 +48,7 @@ export default function Navbar() {
         alignItems: 'center',
         justifyContent: 'space-between',
         bgcolor: '#fff',
-        borderBottom: '1px solid #F1F1F1',
+        borderBottom: `1px solid ${brand.border}`,
         position: 'sticky',
         top: 0,
         zIndex: 99,
@@ -58,7 +60,7 @@ export default function Navbar() {
           underline="hover"
           color="text.secondary"
           href="/"
-          sx={{ fontSize: '0.8125rem', fontWeight: 500 }}
+          sx={{ fontSize: '0.8125rem', fontWeight: 700, color: brand.green }}
         >
           UCO Map
         </Link>
@@ -66,7 +68,7 @@ export default function Navbar() {
           i === crumbs.length - 1 ? (
             <Typography
               key={crumb}
-              sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'text.primary' }}
+              sx={{ fontSize: '0.8125rem', fontWeight: 700, color: 'text.primary' }}
             >
               {crumb}
             </Typography>
@@ -101,7 +103,9 @@ export default function Navbar() {
             sx={{
               width: 32,
               height: 32,
-              background: 'linear-gradient(135deg, #45A876 0%, #276749 100%)',
+              bgcolor: brand.green,
+              color: '#fff',
+              boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${brand.yellow}`,
               fontSize: '0.75rem',
               fontWeight: 700,
             }}
@@ -109,7 +113,7 @@ export default function Navbar() {
             {initials}
           </Avatar>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, lineHeight: 1.2 }}>
+            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, lineHeight: 1.2 }}>
               {user?.role ?? 'Admin'}
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1 }}>

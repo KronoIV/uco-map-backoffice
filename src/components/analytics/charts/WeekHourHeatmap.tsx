@@ -1,5 +1,6 @@
 import { Box, Tooltip, Typography } from '@mui/material';
 import { WEEKDAYS, WEEKDAYS_LONG } from '../../../utils/analyticsFormat';
+import { brand } from '../../../theme/brand';
 
 interface Props {
   /** [día: 0 = lunes][hora 0–23] */
@@ -9,7 +10,7 @@ interface Props {
 }
 
 /** Cuándo se usa la app: días de la semana contra horas del día. */
-export default function WeekHourHeatmap({ grid, unit, color = [0, 184, 116] }: Props) {
+export default function WeekHourHeatmap({ grid, unit, color = [0, 139, 80] }: Props) {
   const max = Math.max(1, ...grid.flat());
   // Solo las horas con actividad en algún día (la app de campus casi no se usa de madrugada)
   const used = Array.from({ length: 24 }, (_, h) => h).filter(h => grid.some(row => row[h] > 0));
@@ -38,7 +39,7 @@ export default function WeekHourHeatmap({ grid, unit, color = [0, 184, 116] }: P
                   <Box
                     sx={{
                       aspectRatio: '1', borderRadius: '4px',
-                      bgcolor: v === 0 ? '#F5F6F8' : `rgba(${r},${g},${b},${a.toFixed(2)})`,
+                      bgcolor: v === 0 ? brand.bgMuted : `rgba(${r},${g},${b},${a.toFixed(2)})`,
                     }}
                   />
                 </Tooltip>

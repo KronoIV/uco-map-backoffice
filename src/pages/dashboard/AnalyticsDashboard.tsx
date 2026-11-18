@@ -24,6 +24,7 @@ import {
   ABANDON_STAGE_LABEL, FEATURE_LABEL, PERMISSION_LABEL, PLATFORM_COLOR, PLATFORM_LABEL, PROBLEM_INFO,
   fmtDay, fmtDuration, fmtNumber, fmtPercent,
 } from '../../utils/analyticsFormat';
+import { brand } from '../../theme/brand';
 
 const SECTIONS = [
   ['resumen', 'Resumen'], ['tendencias', 'Tendencias'], ['usuarios', 'Usuarios'], ['recorridos', 'Recorridos'],
@@ -82,9 +83,9 @@ export default function AnalyticsDashboard() {
         action={
           <Tooltip title="Dispositivos con la app abierta en los últimos 10 minutos (en vivo)">
             <Chip
-              icon={<Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#00d084', ml: 1 }} />}
+              icon={<Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: brand.green, ml: 1 }} />}
               label={`${fmtNumber(live?.activeNow ?? 0)} usando la app ahora`}
-              sx={{ bgcolor: '#E6FBF3', color: '#047857', fontWeight: 600 }}
+              sx={{ bgcolor: brand.green50, color: brand.greenStrong, fontWeight: 700 }}
             />
           </Tooltip>
         }
@@ -97,7 +98,7 @@ export default function AnalyticsDashboard() {
       <Box component="nav" aria-label="Secciones del dashboard" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2.5 }}>
         {SECTIONS.map(([id, label]) => (
           <Chip key={id} label={label} component="a" href={`#${id}`} clickable size="small"
-                sx={{ bgcolor: '#fff', border: '1px solid #E5E7EB', fontWeight: 500 }} />
+                sx={{ bgcolor: '#fff', border: `1px solid ${brand.border}`, fontWeight: 700 }} />
         ))}
       </Box>
 
@@ -131,8 +132,8 @@ export default function AnalyticsDashboard() {
           </Grid>
         </Grid>
         {insights.length > 0 && (
-          <Paper sx={{ ...cardSx, mt: 2, p: 2, bgcolor: '#F7FDFB' }}>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#047857', mb: 0.5 }}>Lectura rápida</Typography>
+          <Paper sx={{ ...cardSx, mt: 2, p: 2, bgcolor: brand.beige50, borderLeft: `4px solid ${brand.yellow}` }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: brand.greenStrong, mb: 0.5 }}>Lectura rápida</Typography>
             <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
               {insights.map(text => <Typography component="li" key={text} sx={{ fontSize: '0.85rem', mb: 0.25 }}>{text}</Typography>)}
             </Box>
@@ -152,9 +153,9 @@ export default function AnalyticsDashboard() {
                   ariaLabel="Usuarios activos y visitas por día"
                   labels={dayLabels}
                   series={[
-                    { name: 'Usuarios activos', color: '#00b874', values: d.daily.map(p => p.activeUsers) },
-                    { name: 'Visitas', color: '#6366F1', values: d.daily.map(p => p.sessions), dashed: !sessionsTracked },
-                    { name: 'Usuarios nuevos', color: '#F59E0B', values: d.daily.map(p => p.newUsers) },
+                    { name: 'Usuarios activos', color: brand.green, values: d.daily.map(p => p.activeUsers) },
+                    { name: 'Visitas', color: brand.blue, values: d.daily.map(p => p.sessions), dashed: !sessionsTracked },
+                    { name: 'Usuarios nuevos', color: brand.orange, values: d.daily.map(p => p.newUsers) },
                   ]}
                 />
               )}
@@ -176,8 +177,8 @@ export default function AnalyticsDashboard() {
                   ariaLabel="Recorridos iniciados y llegados por día"
                   labels={dayLabels}
                   series={[
-                    { name: 'Iniciados', color: '#3B82F6', values: d.daily.map(p => p.trips) },
-                    { name: 'Llegaron', color: '#00b874', values: d.daily.map(p => p.arrived) },
+                    { name: 'Iniciados', color: brand.blue, values: d.daily.map(p => p.trips) },
+                    { name: 'Llegaron', color: brand.green, values: d.daily.map(p => p.arrived) },
                   ]}
                 />
               )}
@@ -197,8 +198,8 @@ export default function AnalyticsDashboard() {
                 <Donut
                   centerValue={fmtNumber(d.users.active)} centerLabel="usuarios activos"
                   segments={[
-                    { label: 'Nuevos', value: d.users.newUsers, color: '#F59E0B' },
-                    { label: 'Recurrentes', value: d.users.returning, color: '#00b874' },
+                    { label: 'Nuevos', value: d.users.newUsers, color: brand.orange },
+                    { label: 'Recurrentes', value: d.users.returning, color: brand.green },
                   ]}
                 />
               )}
@@ -212,7 +213,7 @@ export default function AnalyticsDashboard() {
                 <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {([['Mediana', d.sessionDurations.medianMs], ['75 %', d.sessionDurations.p75Ms], ['90 %', d.sessionDurations.p90Ms]] as const).map(([l, ms]) => (
                     <Tooltip key={l} arrow title={l === 'Mediana' ? 'La mitad de las visitas duran menos' : `El ${l} de las visitas duran menos`}>
-                      <Chip size="small" label={`${l}: ${fmtDuration(ms)}`} sx={{ bgcolor: '#F3F4F6', fontWeight: 600 }} />
+                      <Chip size="small" label={`${l}: ${fmtDuration(ms)}`} sx={{ bgcolor: brand.bgMuted, fontWeight: 700 }} />
                     </Tooltip>
                   ))}
                 </Box>
@@ -229,7 +230,7 @@ export default function AnalyticsDashboard() {
             <ChartCard title="¿Con qué frecuencia vuelven?" subtitle="Visitas de cada usuario en el periodo" loading={loading}
               error={overview.error} empty={!sessionsTracked} emptyText="Aún no hay visitas medidas en este periodo" minHeight={150}>
               {d && (
-                <ColumnChart color="#00b874" height={120}
+                <ColumnChart color={brand.green} height={120}
                   items={d.users.sessionsPerUser.map(b => ({ label: b.label, value: b.count }))}
                   describe={(i, share) => `${i.value.toLocaleString('es-CO')} usuarios con ${i.label} (${Math.round(share * 100)} %)`} />
               )}
@@ -240,7 +241,7 @@ export default function AnalyticsDashboard() {
               loading={loading} error={overview.error} empty={!sessionsTracked} emptyText="Aún no hay visitas medidas en este periodo" minHeight={150}>
               {d && (
                 <TrendChart height={170} ariaLabel="Tiempo de uso por día" labels={dayLabels} format={fmtDuration}
-                  series={[{ name: 'Tiempo de uso', color: '#6366F1', values: d.daily.map(p => p.activeMs) }]} />
+                  series={[{ name: 'Tiempo de uso', color: brand.blue, values: d.daily.map(p => p.activeMs) }]} />
               )}
             </ChartCard>
           </Grid>
@@ -272,7 +273,7 @@ export default function AnalyticsDashboard() {
               info="Se deduce de lo que alcanzó a hacer el recorrido: si llegó al edificio, si abrió la cámara y si la cámara lo ubicó."
               empty={!t || t.abandonStages.length === 0} emptyText="Ningún recorrido abandonado en este periodo">
               {t && (
-                <BarList color="#EF4444"
+                <BarList color={brand.danger}
                   items={t.abandonStages.map(c => ({
                     key: c.key, label: ABANDON_STAGE_LABEL[c.key]?.label ?? c.key, value: c.count,
                     hint: ABANDON_STAGE_LABEL[c.key]?.hint,
@@ -307,7 +308,7 @@ export default function AnalyticsDashboard() {
             <Grid container spacing={3}>
               {[d.features.slice(0, Math.ceil(d.features.length / 2)), d.features.slice(Math.ceil(d.features.length / 2))].map((half, i) => (
                 <Grid key={i} size={{ xs: 12, md: 6 }}>
-                  <BarList max={d.sessionDurations.count} color="#6366F1"
+                  <BarList max={d.sessionDurations.count} color={brand.blue}
                     items={half.map(f => ({
                       key: f.key, label: FEATURE_LABEL[f.key]?.label ?? f.key, value: f.sessions,
                       display: `${fmtPercent(d.sessionDurations.count ? f.sessions / d.sessionDurations.count : null)} de las visitas · ${fmtNumber(f.users)} usuarios`,
@@ -349,12 +350,12 @@ function deviceBreakdowns(d?: AnalyticsOverview): {
 // ── Permisos ─────────────────────────────────────────
 
 const PERMISSION_SEGMENTS: { key: keyof PermissionStat; label: string; color: string }[] = [
-  { key: 'granted', label: 'Concedido', color: '#00b874' },
-  { key: 'notRequired', label: 'No lo pide (Android)', color: '#A7F3D0' },
-  { key: 'pending', label: 'Sin responder', color: '#D1D5DB' },
-  { key: 'denied', label: 'Rechazado', color: '#F59E0B' },
-  { key: 'blocked', label: 'Bloqueado', color: '#EF4444' },
-  { key: 'unavailable', label: 'No disponible', color: '#9CA3AF' },
+  { key: 'granted', label: 'Concedido', color: brand.green },
+  { key: 'notRequired', label: 'No lo pide (Android)', color: brand.green200 },
+  { key: 'pending', label: 'Sin responder', color: brand.borderStrong },
+  { key: 'denied', label: 'Rechazado', color: brand.orange },
+  { key: 'blocked', label: 'Bloqueado', color: brand.danger },
+  { key: 'unavailable', label: 'No disponible', color: brand.text4 },
 ];
 
 function PermissionsBlock({ overview: d, loading, error, dayLabels, periodLabel }: {
@@ -381,10 +382,10 @@ function PermissionsBlock({ overview: d, loading, error, dayLabels, periodLabel 
               centerValue={fmtPercent(p.usersWithData ? (ofThree['3'] ?? 0) / p.usersWithData : null)}
               centerLabel="con los 3 permisos"
               segments={[
-                { label: 'Los 3 permisos', value: ofThree['3'] ?? 0, color: '#00b874' },
-                { label: '2 permisos', value: ofThree['2'] ?? 0, color: '#FCD34D' },
-                { label: '1 permiso', value: ofThree['1'] ?? 0, color: '#F59E0B' },
-                { label: 'Ninguno', value: ofThree['0'] ?? 0, color: '#EF4444' },
+                { label: 'Los 3 permisos', value: ofThree['3'] ?? 0, color: brand.green },
+                { label: '2 permisos', value: ofThree['2'] ?? 0, color: brand.yellow },
+                { label: '1 permiso', value: ofThree['1'] ?? 0, color: brand.orange },
+                { label: 'Ninguno', value: ofThree['0'] ?? 0, color: brand.danger },
               ]}
             />
           )}
@@ -426,9 +427,9 @@ function PermissionsBlock({ overview: d, loading, error, dayLabels, periodLabel 
             <TrendChart height={180} ariaLabel="Porcentaje de usuarios que conceden los permisos por día" labels={dayLabels}
               format={n => fmtPercent(n)}
               series={[
-                { name: 'Con los 3 permisos', color: '#00b874', values: evolution.map(e => e.all) },
-                { name: 'Cámara', color: '#6366F1', values: evolution.map(e => e.camera), dashed: true },
-                { name: 'Ubicación', color: '#F59E0B', values: evolution.map(e => e.location), dashed: true },
+                { name: 'Con los 3 permisos', color: brand.green, values: evolution.map(e => e.all) },
+                { name: 'Cámara', color: brand.blue, values: evolution.map(e => e.camera), dashed: true },
+                { name: 'Ubicación', color: brand.orange, values: evolution.map(e => e.location), dashed: true },
               ]} />
           )}
         </ChartCard>
@@ -455,14 +456,14 @@ function ProblemsBlock({ overview: d, loading, error }: { overview?: AnalyticsOv
             const warn = rate >= 0.1;
             return (
               <Box component="li" key={p.code}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: '12px', bgcolor: '#FAFAFA' }}>
-                <ReportProblemRoundedIcon sx={{ color: severe ? '#DC2626' : warn ? '#F59E0B' : '#9CA3AF', fontSize: 20 }} />
+                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: '12px', bgcolor: brand.bg }}>
+                <ReportProblemRoundedIcon sx={{ color: severe ? brand.danger : warn ? brand.orange : brand.text4, fontSize: 20 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{info?.label ?? p.code}</Typography>
                   <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{info?.hint}</Typography>
                 </Box>
                 <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: severe ? '#DC2626' : warn ? '#B45309' : 'text.primary' }}>
+                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: severe ? brand.danger : warn ? brand.orangeInk : 'text.primary' }}>
                     {fmtPercent(rate)}
                   </Typography>
                   <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>

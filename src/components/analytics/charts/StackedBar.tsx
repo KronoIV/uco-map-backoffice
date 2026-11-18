@@ -1,4 +1,5 @@
 import { Box, Tooltip, Typography } from '@mui/material';
+import { brand } from '../../../theme/brand';
 
 export interface StackSegment {
   label: string;
@@ -22,7 +23,7 @@ export default function StackedBar({ title, segments, headline }: Props) {
         <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{title}</Typography>
         {headline && <Typography sx={{ fontSize: '0.8rem', fontWeight: 700 }}>{headline}</Typography>}
       </Box>
-      <Box sx={{ display: 'flex', height: 14, borderRadius: 100, overflow: 'hidden', bgcolor: '#F3F4F6' }}>
+      <Box sx={{ display: 'flex', height: 14, borderRadius: 100, overflow: 'hidden', bgcolor: brand.bgMuted }}>
         {total > 0 && segments.filter(s => s.value > 0).map(s => (
           <Tooltip key={s.label} arrow
                    title={`${s.label}: ${s.value.toLocaleString('es-CO')} (${Math.round((s.value / total) * 100)} %)`}>

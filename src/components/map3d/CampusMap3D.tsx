@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GraphEdge, GraphNode } from '../../types';
 import { FOOT_WAYS, hideTileRoadsInside, type CampusOsm } from '../../utils/campus-osm';
 import { nodeBadgeHtml } from './doorIcon';
+import { brand } from '../../theme/brand';
 
 // Misma vista que el mapa exterior de la app (uco-map-app/src/navigation/outdoor-map.ts)
 const STREET_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
@@ -117,7 +118,7 @@ function addOverlays(map: MlMap) {
   });
   add({
     id: 'ucm-rubber-line', type: 'line', source: 'ucm-rubber',
-    paint: { 'line-color': '#F59E0B', 'line-width': 3, 'line-dasharray': [2, 1.6] },
+    paint: { 'line-color': brand.orange, 'line-width': 3, 'line-dasharray': [2, 1.6] },
   });
 }
 
@@ -245,7 +246,7 @@ export default function CampusMap3D(props: Props) {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
     const { route: r, routeColor: color } = propsRef.current;
-    const data = r && r.length >= 2 ? collection([line(r, { color: color ?? '#00d084' })]) : EMPTY;
+    const data = r && r.length >= 2 ? collection([line(r, { color: color ?? brand.green })]) : EMPTY;
     (map.getSource('ucm-route') as GeoJSONSource | undefined)?.setData(data);
   };
 
@@ -408,7 +409,7 @@ export default function CampusMap3D(props: Props) {
       }
     };
     place('user', userPos, { color: '#4285F4', border: '#fff', size: 18, ring: true });
-    place('pin', pin, { color: '#F59E0B', border: '#fff', size: 12, ring: true });
+    place('pin', pin, { color: brand.yellow, border: '#fff', size: 12, ring: true });
   }, [userPos, pin]);
 
   useEffect(() => {

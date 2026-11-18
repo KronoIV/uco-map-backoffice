@@ -1,4 +1,5 @@
 import { Box, Tooltip, Typography } from '@mui/material';
+import { brand } from '../../../theme/brand';
 
 export interface BarItem {
   key: string;
@@ -20,7 +21,7 @@ interface Props {
 }
 
 /** Ranking horizontal: más fácil de leer que una torta cuando hay muchas categorías. */
-export default function BarList({ items, total, color = '#00b874', max, showPercent = true }: Props) {
+export default function BarList({ items, total, color = brand.green, max, showPercent = true }: Props) {
   const base = total ?? items.reduce((s, i) => s + i.value, 0);
   const top = max ?? Math.max(1, ...items.map(i => i.value));
   return (
@@ -37,7 +38,7 @@ export default function BarList({ items, total, color = '#00b874', max, showPerc
                 {item.display ?? `${item.value.toLocaleString('es-CO')}${showPercent ? ` · ${Math.round(pct * 100)} %` : ''}`}
               </Typography>
             </Box>
-            <Box sx={{ height: 8, bgcolor: '#F3F4F6', borderRadius: 100, overflow: 'hidden' }}>
+            <Box sx={{ height: 8, bgcolor: brand.bgMuted, borderRadius: 100, overflow: 'hidden' }}>
               <Box
                 sx={{
                   height: '100%', width: `${(item.value / top) * 100}%`, bgcolor: item.color ?? color,
