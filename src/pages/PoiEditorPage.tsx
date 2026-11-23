@@ -7,11 +7,15 @@ import {
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
-import MapViewer, { type MapViewerApi, type ViewerMarker } from '../components/poi-editor/MapViewer';
+import MapViewer, { type MapViewerApi, type ViewerConnection, type ViewerMarker } from '../components/poi-editor/MapViewer';
 import NavigationPanel from '../components/poi-editor/NavigationPanel';
+import MapEditPanel, { ConfirmDialog, EditToolbar } from '../components/poi-editor/MapEditPanel';
+import { MODE_COLORS } from '../components/poi-editor/sceneEditing';
 import { useNavigationEditor } from '../components/poi-editor/useNavigationEditor';
+import { useMapEditor } from '../components/poi-editor/useMapEditor';
 import { roomService } from '../services/roomService';
 import { multisetService } from '../services/multisetService';
+import { navigationService } from '../services/navigationService';
 import { resolveApiError } from '../services/api';
 import scenePinsData from '../data/scenePins.json';
 import type { ArPoint, Room } from '../types';
@@ -50,9 +54,18 @@ export default function PoiEditorPage() {
   const [showReference, setShowReference] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'rooms' | 'nav'>('rooms');
+  const [tab, setTab] = useState<'rooms' | 'nav' | 'edit'>('rooms');
   const viewerApiRef = useRef<MapViewerApi | null>(null);
-  const nav = useNavigationEditor(() => viewerApiRef.current, (meshesQ.data ?? []).map(m => m.name), setFocus);
+  // Misma consulta que el editor de navegación (react-query la comparte): nombres de las conexiones al bloquearlas
+  const connectionsQ = useQuery({ queryKey: ['nav-connections'], queryFn: navigationService.getConnections });
+  const edit = useMapEditor(() => viewerApiRef.current, tab === 'edit', connectionsQ.data ?? []);
+  const nav = useNavigationEditor(() => viewerApiRef.current, (meshesQ.data ?? []).map(m => m.name), setFocus, {
+    blocked: edit.forBuild.blocked,
+    blockedConnections: edit.forBuild.blockedConnections,
+    revision: edit.revision,
+    unsaved: edit.unsaved,
+  });
+  const editing = tab === 'edit';
 
   const rooms = useMemo(
     () => (roomsQ.data ?? [])
@@ -138,9 +151,25 @@ export default function PoiEditorPage() {
     });
   };
 
-  const editing = draft ?? selected?.arPosition ?? null;
+  const editPoint = draft ?? selected?.arPosition ?? null;
   const filtered = rooms.filter(r => `${r.name} ${r.roomId} ${r.category}`.toLowerCase().includes(search.toLowerCase()));
   const loading = Object.entries(progress);
+
+  const viewerConnections = useMemo<ViewerConnection[]>(() => {
+    const picked = new Set(editing && edit.mode === 'nav' ? edit.selection.nav.connections : []);
+    return nav.viewerConnections.map(c => ({
+      ...c,
+      blocked: edit.blockedConnIds.has(c.id),
+      selected: c.selected || picked.has(c.id),
+      selectable: editing ? edit.mode === 'nav' : c.selectable,
+    }));
+  }, [nav.viewerConnections, edit.blockedConnIds, edit.selection.nav.connections, edit.mode, editing]);
+
+  const connectionById = (id: string) => nav.connections.find(c => c.id === id) ?? null;
+  const changeTab = (next: 'rooms' | 'nav' | 'edit') => {
+    if (next === 'edit') { nav.cancel(); nav.cancelPatch(); nav.cancelElevator(); }
+    setTab(next);
+  };
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -154,11 +183,23 @@ export default function PoiEditorPage() {
       <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
         {/* ── Panel de lugares ───────────────────────────────────────── */}
         <Paper sx={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}>
+          <Tabs value={tab} onChange={(_, v) => changeTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}>
             <Tab value="rooms" label="Lugares" sx={{ minHeight: 40 }} />
             <Tab value="nav" label="Navegación" sx={{ minHeight: 40 }} />
+            <Tab value="edit" label={edit.unsaved ? `Corregir (${edit.changeCount})` : 'Corregir'} sx={{ minHeight: 40 }} />
           </Tabs>
-          {tab === 'nav' ? <NavigationPanel nav={nav} buildings={buildings} /> : (<>
+          {tab === 'edit' ? (
+            <MapEditPanel
+              edit={edit}
+              focus={p => setFocus({ ...p })}
+              connectionLabel={id => connectionById(id)?.label ?? null}
+              connectionCenter={id => {
+                const c = connectionById(id);
+                return c ? { x: (c.start.x + c.end.x) / 2, y: (c.start.y + c.end.y) / 2, z: (c.start.z + c.end.z) / 2 } : null;
+              }}
+              onGoToNavigation={() => changeTab('nav')}
+            />
+          ) : tab === 'nav' ? <NavigationPanel nav={nav} buildings={buildings} blockedConnections={edit.blockedConnIds} /> : (<>
           <Box sx={{ p: 1.5 }}>
             <OutlinedInput
               size="small" fullWidth placeholder="Buscar lugar…" value={search}
@@ -198,10 +239,10 @@ export default function PoiEditorPage() {
                 {(['x', 'y', 'z'] as const).map(axis => (
                   <TextField
                     key={axis} size="small" type="number" label={axis.toUpperCase()}
-                    value={editing ? editing[axis] : ''}
+                    value={editPoint ? editPoint[axis] : ''}
                     onChange={e => {
                       const v = Number(e.target.value);
-                      if (Number.isFinite(v)) setDraft({ ...(editing ?? { x: 0, y: 0, z: 0 }), [axis]: v });
+                      if (Number.isFinite(v)) setDraft({ ...(editPoint ?? { x: 0, y: 0, z: 0 }), [axis]: v });
                     }}
                     slotProps={{ htmlInput: { step: 0.1 } }}
                   />
@@ -276,19 +317,25 @@ export default function PoiEditorPage() {
               />
             </Box>
           )}
-          <Box sx={{ flex: 1, minHeight: 0 }}>
+          <Box sx={{
+            flex: 1, minHeight: 0, position: 'relative',
+            outline: editing ? `3px solid ${MODE_COLORS[edit.mode]}` : 'none', outlineOffset: -3,
+          }}>
+            {editing && <EditToolbar edit={edit} />}
             <MapViewer
               meshes={visibleMeshes}
               markers={markers}
-              connections={nav.viewerConnections}
+              connections={viewerConnections}
               patches={nav.viewerPatches}
               elevators={nav.viewerElevators}
-              navMesh={nav.viewerNavMesh}
+              blocks={tab === 'rooms' ? NO_BLOCKS : edit.viewerBlocks}
+              navMesh={editing && edit.mode === 'nav' ? nav.shownPreview : nav.viewerNavMesh}
               clipY={clipY}
-              pickPlaneY={tab === 'nav' ? nav.pickPlaneY : null}
+              pickPlaneY={tab === 'nav' ? nav.pickPlaneY : editing ? edit.pickPlaneY : null}
               focus={focus}
               onPick={p => {
-                if (tab === 'nav') nav.handlePick(p);
+                if (editing) edit.handlePick(p);
+                else if (tab === 'nav') nav.handlePick(p);
                 else if (selected) setDraft(p);
               }}
               onMarkerClick={handleMarkerClick}
@@ -296,11 +343,23 @@ export default function PoiEditorPage() {
               onProgress={handleProgress}
               onError={setError}
               onReady={api => { viewerApiRef.current = api; }}
+              editMode={editing ? edit.mode : 'none'}
+              editTool={edit.tool}
+              toolSize={edit.toolSize}
+              visibleOnly={edit.visibleOnly}
+              scanEdits={edit.viewerScanEdits}
+              showRemoved={editing && edit.mode === 'model' && edit.showRemoved}
+              onSelectionChange={edit.setSelection}
+              onEditMismatch={edit.setMismatched}
             />
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ px: 1.5, py: 0.75 }}>
             Arrastra para rotar · clic derecho para desplazar · rueda para zoom · WASD para moverte (Q/E bajar/subir) · flechas para girar la cámara · Shift rápido · usa el corte de altura para ver cada piso.
-            {tab === 'nav'
+            {editing
+              ? edit.mode === 'model'
+                ? ' Modelo 3D: selecciona lo que sobra (naranja) y elimínalo con Supr. Con pincel o área, gira con el botón derecho.'
+                : ' Malla: selecciona polígonos (amarillo) o escaleras y bloquéalos con Supr; rojo = bloqueado. Con área, gira con el botón derecho.'
+              : tab === 'nav'
               ? nav.drawingPatch
                 ? ' Clic sobre el piso alrededor del hueco para agregar puntos · Shift+clic = a la altura del punto anterior · Retroceso deshace · Enter termina.'
                 : nav.pickingStops
@@ -310,6 +369,9 @@ export default function PoiEditorPage() {
           </Typography>
         </Paper>
       </Box>
+      <ConfirmDialog request={edit.confirm} onClose={edit.closeConfirm} />
     </Box>
   );
 }
+
+const NO_BLOCKS: never[] = [];

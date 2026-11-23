@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { navigationService } from '../../services/navigationService';
 import { resolveApiError } from '../../services/api';
 import { readNavMesh, type BuildResult, type ConnectionCheck, type NavMeshPreview, type PatchCheck } from '../../utils/navmesh';
-import type { BuildReport } from '../../utils/navmesh-builder';
+import type { BlockedArea, BuildReport } from '../../utils/navmesh-builder';
 import { patchArea, rampInfo, stairsRamp } from '../../utils/navPatches';
 import { addElevatorStop, elevatorProblem, type DraftStop } from '../../utils/elevators';
 import type { ArPoint, NavConnection, NavElevator, NavPatch } from '../../types';
@@ -45,12 +45,25 @@ interface Generated {
   preview: NavMeshPreview;
   removed: number;
   report: BuildReport;
+  blockedAreas: number;
+  blockedConnections: number;
+}
+
+/** Ediciones del modelo y bloqueos (pestaña «Corregir») que entran a la generación. */
+export interface NavBuildEdits {
+  blocked: BlockedArea[];
+  blockedConnections: Set<string>;
+  /** Sube con cada cambio del admin: el navmesh mostrado ya no los refleja. */
+  revision: number;
+  /** Hay ediciones sin guardar: no se publica un navmesh que no se podría reproducir. */
+  unsaved: boolean;
 }
 
 export function useNavigationEditor(
   getViewer: () => MapViewerApi | null,
   expectedMaps: string[],
   onFocus: (p: ArPoint) => void,
+  edits: NavBuildEdits,
 ) {
   const qc = useQueryClient();
   const connectionsQ = useQuery({ queryKey: ['nav-connections'], queryFn: navigationService.getConnections });
@@ -88,7 +101,12 @@ export function useNavigationEditor(
   const [elevatorDraft, setElevatorDraft] = useState<DraftElevator | null>(null);
   const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(null);
   const [pickingStops, setPickingStops] = useState(false);
-
+  // Cada edición del modelo o bloqueo deja desactualizado el navmesh mostrado
+  const [seenRevision, setSeenRevision] = useState(edits.revision);
+  if (seenRevision !== edits.revision) {
+    setSeenRevision(edits.revision);
+    setDirty(true);
+  }
   const connections = useMemo(() => connectionsQ.data ?? [], [connectionsQ.data]);
   const patches = useMemo(() => patchesQ.data ?? [], [patchesQ.data]);
   const elevators = useMemo(() => elevatorsQ.data ?? [], [elevatorsQ.data]);
@@ -369,7 +387,8 @@ export function useNavigationEditor(
     }
     setGenerating(true);
     const usedPatches = patches;
-    const usedConnections = connections;
+    const usedConnections = connections.filter(c => !edits.blockedConnections.has(c.id!));
+    const blocked = edits.blocked;
     const worker = new Worker(new URL('../../workers/navmeshWorker.ts', import.meta.url), { type: 'module' });
     try {
       const result = await new Promise<({ ok: true } & BuildResult) | { ok: false; error: string }>(
@@ -383,11 +402,15 @@ export function useNavigationEditor(
               startPosition: c.start, endPosition: c.end, radius: c.radius, bidirectional: c.bidirectional,
             })),
             patches: usedPatches.map(p => ({ points: p.points })),
+            blocked,
           }, [geometry.positions.buffer, geometry.indices.buffer]);
         },
       );
       if (!result.ok) throw new Error(result.error);
-      setGenerated({ data: result.data, preview: result.preview, removed: result.removed, report: result.report });
+      setGenerated({
+        data: result.data, preview: result.preview, removed: result.removed, report: result.report,
+        blockedAreas: blocked.length, blockedConnections: connections.length - usedConnections.length,
+      });
       setPatchChecks(Object.fromEntries(usedPatches.map((p, i) => [p.id!, result.patchChecks[i]])));
       setConnectionChecks(Object.fromEntries(usedConnections.map((c, i) => [c.id!, result.connectionChecks[i]])));
       setDirty(false);
@@ -422,7 +445,7 @@ export function useNavigationEditor(
             mode: 'input',
             positions: geometry.positions,
             indices: geometry.indices,
-            connections: connections.map(c => ({
+            connections: connections.filter(c => !edits.blockedConnections.has(c.id!)).map(c => ({
               startPosition: c.start, endPosition: c.end, radius: c.radius, bidirectional: c.bidirectional,
             })),
             patches: patches.map(p => ({ points: p.points })),
@@ -519,7 +542,9 @@ export function useNavigationEditor(
     generate,
     exportInput,
     exporting,
-    publish: () => generated && publishMut.mutate(generated.data),
+    publish: () => generated && !edits.unsaved && publishMut.mutate(generated.data),
+    publishBlocked: edits.unsaved,
+    shownPreview,
     publishing: publishMut.isPending,
     discardGenerated: () => setGenerated(null),
     handlePick,

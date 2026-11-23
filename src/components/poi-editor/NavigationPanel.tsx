@@ -86,12 +86,19 @@ const STAIRS_STEPS = [
 const rampText = (r: RampInfo) => `sube ${r.rise.toFixed(1)} m · ${Math.round(r.slopeDeg)}°`;
 
 /** `buildings`: categorías de los salones, para asignar cada ascensor a su edificio. */
-export default function NavigationPanel({ nav, buildings = [] }: { nav: NavigationEditor; buildings?: string[] }) {
+export default function NavigationPanel({ nav, buildings = [], blockedConnections }: {
+  nav: NavigationEditor;
+  buildings?: string[];
+  blockedConnections?: Set<string>;
+}) {
   const { draft, patchDraft, elevatorDraft } = nav;
   const draftCheck = patchDraft?.id ? checkText(nav.patchChecks[patchDraft.id], patchDraft.points) : null;
 
+  const blockedText = nav.generated && (nav.generated.blockedAreas || nav.generated.blockedConnections)
+    ? ` · ${nav.generated.blockedAreas} zona(s) bloqueada(s)${nav.generated.blockedConnections ? `, ${nav.generated.blockedConnections} conexión(es) desactivada(s)` : ''}`
+    : '';
   const status = nav.generated
-    ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones${nav.generated.removed ? ` · ${nav.generated.removed} triángulos del escaneo ignorados sobre parches` : ''}`
+    ? `Vista previa sin publicar · ${nav.generated.preview.offMeshConnections} conexiones${nav.generated.removed ? ` · ${nav.generated.removed} triángulos del escaneo ignorados sobre parches` : ''}${blockedText}`
     : nav.info && nav.currentPreview
       ? `Publicado ${new Date(nav.info.updatedAt).toLocaleString()} · ${(nav.info.sizeBytes / 1024).toFixed(0)} KB · ${nav.currentPreview.offMeshConnections} conexiones`
       : nav.currentLoaded
@@ -126,7 +133,13 @@ export default function NavigationPanel({ nav, buildings = [] }: { nav: Navigati
           label={<Typography variant="caption">Mostrar navmesh en verde</Typography>}
         />
         {nav.dirty && !nav.generated && (
-          <Alert severity="warning" sx={{ my: 1, py: 0 }}>Las conexiones o los parches cambiaron: regenera y publica el navmesh.</Alert>
+          <Alert severity="warning" sx={{ my: 1, py: 0 }}>Las conexiones, los parches o las correcciones cambiaron: regenera y publica el navmesh.</Alert>
+        )}
+        {nav.dirty && nav.generated && (
+          <Alert severity="warning" sx={{ my: 1, py: 0 }}>La vista previa no incluye los últimos cambios: regenera antes de publicar.</Alert>
+        )}
+        {nav.generated && nav.publishBlocked && (
+          <Alert severity="info" sx={{ my: 1, py: 0 }}>Hay correcciones sin guardar en «Corregir»: guárdalas para poder publicar.</Alert>
         )}
         {nav.error && <Alert severity="error" onClose={() => nav.setError(null)} sx={{ my: 1, py: 0 }}>{nav.error}</Alert>}
         {nav.generating && (
@@ -141,7 +154,7 @@ export default function NavigationPanel({ nav, buildings = [] }: { nav: Navigati
           </Button>
           {nav.generated && (
             <>
-              <Button size="small" variant="contained" startIcon={<CloudUploadRoundedIcon />} disabled={nav.publishing} onClick={nav.publish}>
+              <Button size="small" variant="contained" startIcon={<CloudUploadRoundedIcon />} disabled={nav.publishing || nav.publishBlocked} onClick={nav.publish}>
                 Publicar
               </Button>
               <Button size="small" onClick={nav.discardGenerated}>Descartar</Button>
@@ -307,12 +320,13 @@ export default function NavigationPanel({ nav, buildings = [] }: { nav: Navigati
       <List dense sx={{ py: 0 }}>
         {nav.connections.map(c => {
           const warning = connectionText(nav.connectionChecks[c.id!]);
+          const blocked = blockedConnections?.has(c.id!);
           return (
             <ListItemButton key={c.id} selected={c.id === nav.selectedId} onClick={() => nav.select(c.id!)}>
               <ListItemText
-                primary={c.label}
+                primary={blocked ? `${c.label} · bloqueada` : c.label}
                 secondary={`${c.group ? `${c.group} · ` : ''}${dist(c.start, c.end).toFixed(1)} m · Δy ${(c.end.y - c.start.y).toFixed(1)} m${warning ? ` · ${warning}` : ''}`}
-                slotProps={{ secondary: { color: warning ? 'warning.main' : 'text.secondary' } }}
+                slotProps={{ primary: { color: blocked ? 'error.main' : undefined }, secondary: { color: warning ? 'warning.main' : 'text.secondary' } }}
               />
             </ListItemButton>
           );

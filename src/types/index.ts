@@ -181,6 +181,44 @@ export interface NavMeshInfo {
   sizeBytes: number;
 }
 
+/** Triángulos quitados de una malla del escaneo: pares [inicio, cantidad] sobre el índice original del GLB. */
+export interface ScanEditMesh {
+  map: string;
+  /** Orden de la malla dentro del GLB del mapa. */
+  mesh: number;
+  /** Triángulos de la malla al editarla: si no coincide (mapa reprocesado), la edición no se aplica. */
+  triangles: number;
+  ranges: number[];
+}
+
+/** Limpieza del modelo 3D: lo quitado ya no se ve ni entra al generar el navmesh. */
+export interface ScanEdit {
+  id?: string;
+  label: string;
+  meshes: ScanEditMesh[];
+  center: ArPoint;
+  triangleCount: number;
+  createdAt?: string;
+  createdBy?: string | null;
+}
+
+export type NavBlockKind = 'AREA' | 'BARRIER' | 'CONNECTION';
+
+/** Bloqueo manual del navmesh: se aplica en cada generación. */
+export interface NavBlock {
+  id?: string;
+  label: string;
+  kind: NavBlockKind;
+  /** AREA: polígonos convexos (los del navmesh seleccionados). */
+  polygons?: ArPoint[][] | null;
+  /** BARRIER: línea sobre el piso que las rutas no cruzan. */
+  line?: ArPoint[] | null;
+  /** CONNECTION: escalera o conexión desactivada. */
+  connectionId?: string | null;
+  createdAt?: string;
+  createdBy?: string | null;
+}
+
 // ──────────────── PoiClip ─────────────────────────────────────
 export interface PoiClip {
   clipId: string;

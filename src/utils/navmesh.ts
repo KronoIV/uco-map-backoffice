@@ -1,7 +1,7 @@
-import { init, importNavMesh, exportNavMesh, getNavMeshPositionsAndIndices, Detour, NavMeshQuery, type NavMesh } from 'recast-navigation';
+import { init, importNavMesh, exportNavMesh, Detour, NavMeshQuery, type NavMesh } from 'recast-navigation';
 import type { ArPoint } from '../types';
 import { encodeNavMeshInput } from './navmesh-input';
-import { generateNavMesh, type BuildReport } from './navmesh-builder';
+import { generateNavMesh, type BlockedArea, type BuildReport } from './navmesh-builder';
 import { applyPatches, preparePatch, surfaceAt } from './navPatches';
 
 /**
@@ -33,6 +33,11 @@ export interface NavMeshPreview {
   positions: Float32Array;
   indices: Uint32Array;
   offMeshConnections: number;
+  /** Polígono de Detour de cada triángulo. */
+  triPoly: Uint32Array;
+  /** Contorno (x, y, z) de cada polígono, convexo: los vértices de p van de polyStart[p] a polyStart[p + 1]. */
+  polyVerts: Float32Array;
+  polyStart: Uint32Array;
 }
 
 export interface OffMeshConnectionInput {
@@ -144,14 +149,56 @@ function checkConnections(navMesh: NavMesh, count: number): ConnectionCheck[] {
   return out;
 }
 
+/** Triángulos de detalle como getNavMeshPositionsAndIndices, más el polígono de cada uno y su contorno (para editarlo). */
 function describeNavMesh(navMesh: NavMesh): NavMeshPreview {
-  const [positions, indices] = getNavMeshPositionsAndIndices(navMesh);
+  const positions: number[] = [];
+  const triPoly: number[] = [];
+  const polyVerts: number[] = [];
+  const polyStart: number[] = [0];
   let offMeshConnections = 0;
-  for (let i = 0; i < navMesh.getMaxTiles(); i++) {
-    const header = navMesh.getTile(i).header();
-    if (header) offMeshConnections += header.offMeshConCount();
+  for (let ti = 0; ti < navMesh.getMaxTiles(); ti++) {
+    const tile = navMesh.getTile(ti);
+    const header = tile.header();
+    if (!header) continue;
+    offMeshConnections += header.offMeshConCount();
+    for (let pi = 0; pi < header.polyCount(); pi++) {
+      const poly = tile.polys(pi);
+      if (poly.getType() === 1) continue;
+      const p = polyStart.length - 1;
+      const nv = poly.vertCount();
+      for (let j = 0; j < nv; j++) {
+        const v = poly.verts(j) * 3;
+        polyVerts.push(tile.verts(v), tile.verts(v + 1), tile.verts(v + 2));
+      }
+      polyStart.push(polyVerts.length / 3);
+      const detail = tile.detailMeshes(pi);
+      const triBase = detail.triBase();
+      for (let k = 0; k < detail.triCount(); k++) {
+        const base = (triBase + k) * 4;
+        for (let c = 0; c < 3; c++) {
+          const vi = tile.detailTris(base + c);
+          if (vi < nv) {
+            const v = poly.verts(vi) * 3;
+            positions.push(tile.verts(v), tile.verts(v + 1), tile.verts(v + 2));
+          } else {
+            const v = (detail.vertBase() + vi - nv) * 3;
+            positions.push(tile.detailVerts(v), tile.detailVerts(v + 1), tile.detailVerts(v + 2));
+          }
+        }
+        triPoly.push(p);
+      }
+    }
   }
-  return { positions: new Float32Array(positions), indices: new Uint32Array(indices), offMeshConnections };
+  const indices = new Uint32Array(positions.length / 3);
+  for (let i = 0; i < indices.length; i++) indices[i] = i;
+  return {
+    positions: new Float32Array(positions),
+    indices,
+    offMeshConnections,
+    triPoly: new Uint32Array(triPoly),
+    polyVerts: new Float32Array(polyVerts),
+    polyStart: new Uint32Array(polyStart),
+  };
 }
 
 export async function readNavMesh(data: Uint8Array): Promise<NavMeshPreview> {
@@ -207,11 +254,13 @@ export async function buildNavMesh(
   scanIndices: Uint32Array,
   connections: OffMeshConnectionInput[],
   patches: { points: ArPoint[] }[] = [],
+  blocked: BlockedArea[] = [],
 ): Promise<BuildResult> {
   await initRecast();
   const { positions, indices, removed } = recastGeometry(scanPositions, scanIndices, patches);
   const { navMesh, report } = generateNavMesh(
     positions, indices, connections.map((c, userId) => ({ ...c, userId })), NAVMESH_SETTINGS, NAVMESH_DETAIL,
+    undefined, blocked,
   );
   try {
     return {

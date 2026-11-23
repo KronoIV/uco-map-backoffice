@@ -23,7 +23,7 @@ import {
   buildCompactHeightfield, buildContours, buildDistanceField, buildPolyMesh, buildPolyMeshDetail, buildRegions,
   calcGridSize, createHeightfield, createNavMeshData, erodeWalkableArea, filterLedgeSpans,
   filterLowHangingWalkableObstacles, filterWalkableLowHeightSpans, freeCompactHeightfield, freeContourSet,
-  freeHeightfield, freePolyMesh, freePolyMeshDetail, rasterizeTriangles, type RecastHeightfield,
+  freeHeightfield, freePolyMesh, freePolyMeshDetail, markConvexPolyArea, rasterizeTriangles, type RecastHeightfield,
 } from 'recast-navigation';
 
 export interface WalkerSettings {
@@ -48,6 +48,13 @@ export interface OffMeshConnection {
   radius: number;
   bidirectional: boolean;
   userId?: number;
+}
+
+/** Zona que el admin bloqueó: polígono convexo en planta, solo para el suelo entre hmin y hmax (m). */
+export interface BlockedArea {
+  points: Array<{ x: number; y: number; z: number }>;
+  hmin: number;
+  hmax: number;
 }
 
 export interface RepairSettings {
@@ -809,6 +816,17 @@ function fillGeometry(g: SpanColumns, fills: Array<{ c: number; top: number }>, 
   return { positions: pos, indices: idx };
 }
 
+function markBlocked(ctx: RecastBuildContext, chf: ReturnType<typeof allocCompactHeightfield>, b: BlockedArea) {
+  if (b.points.length < 3) return;
+  const va = new VerticesArray();
+  try {
+    va.copy(new Float32Array(b.points.flatMap(p => [p.x, p.y, p.z])));
+    markConvexPolyArea(ctx, va, b.points.length, b.hmin, b.hmax, Recast.RC_NULL_AREA, chf);
+  } finally {
+    va.destroy();
+  }
+}
+
 export function generateNavMesh(
   positions: Float32Array,
   rawIndices: Uint32Array,
@@ -816,6 +834,7 @@ export function generateNavMesh(
   s: WalkerSettings,
   detail: DetailSettings,
   repair: RepairSettings = DEFAULT_REPAIR,
+  blocked: BlockedArea[] = [],
 ): { navMesh: NavMesh; report: BuildReport } {
   const ms: Record<string, number> = {};
   let t0 = performance.now();
@@ -916,6 +935,8 @@ export function generateNavMesh(
     hfAlive = false;
     lap('filter');
     if (!erodeWalkableArea(ctx, cells.radius, chf)) throw new Error('No se pudo erosionar el área caminable');
+    // Tras la erosión, como los volúmenes de RecastDemo: el corte queda exacto y no se come el pasillo de al lado
+    for (const b of blocked) markBlocked(ctx, chf, b);
     if (!buildDistanceField(ctx, chf)) throw new Error('No se pudo calcular el campo de distancias');
     if (!buildRegions(ctx, chf, 0, 8 * 8, 20 * 20)) throw new Error('No se pudieron construir las regiones');
     lap('regions');
