@@ -21,6 +21,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import { useAuth } from '../context/AuthContext';
 
 const SIDEBAR_EXPANDED = 236;
@@ -36,6 +37,7 @@ const navItems = [
 ];
 
 const bottomItems = [
+  { label: 'Ayuda', icon: <HelpOutlineRoundedIcon fontSize="small" />, path: '/help' },
   { label: 'Configuración', icon: <SettingsRoundedIcon fontSize="small" />, path: '/settings' },
 ];
 

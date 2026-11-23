@@ -11,6 +11,7 @@ import ActivityPage from '../pages/ActivityPage';
 import CampusPage from '../pages/CampusPage';
 import EventsPage from '../pages/EventsPage';
 import UsersPage from '../pages/users/UsersPage';
+import HelpPage from '../pages/help/HelpPage';
 import NotFoundPage from '../pages/NotFoundPage';
 
 const router = createBrowserRouter([
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
           { path: 'sessions', element: <ActivityPage /> },
           { path: 'trips', element: <Navigate to="/sessions?tab=trips" replace /> },
           { path: 'users', element: <UsersPage /> },
+          { path: 'help', element: <HelpPage /> },
         ],
       },
     ],

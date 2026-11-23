@@ -20,6 +20,7 @@ const routeMap: Record<string, string[]> = {
   '/settings': ['Configuración'],
   '/sessions': ['Actividad'],
   '/users': ['Usuarios'],
+  '/help': ['Ayuda'],
 };
 
 function useBreadcrumbs() {
