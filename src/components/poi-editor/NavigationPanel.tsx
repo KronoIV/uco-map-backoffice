@@ -34,6 +34,7 @@ function repairText(r: BuildReport): string {
     r.invertedFloorM2 > 0 && `${m2(r.invertedFloorM2)} de suelo con la normal invertida recuperado`,
     r.floaters.clusters > 0 && `${r.floaters.clusters} restos flotantes quitados`,
     r.spikes > 0 && `${r.spikes} picos o postes delgados recortados`,
+    r.stairs.length > 0 && `${r.stairs.length} escalera(s) o rampa(s) reconstruida(s) (${m2(r.stairs.reduce((s, x) => s + x.areaM2, 0))})`,
     r.droppedTriangles > 0 && `${r.droppedTriangles} triángulos inválidos descartados`,
   ].filter(Boolean);
   return parts.length ? `Reparado: ${parts.join(', ')}.` : 'El escaneo no necesitó reparaciones.';
@@ -127,6 +128,17 @@ export default function NavigationPanel({ nav, buildings = [], blockedConnection
             ))}
           </Alert>
         )}
+        {nav.generated && nav.generated.report.stairs.length > 0 && (
+          <Alert severity="success" sx={{ my: 1, py: 0 }}>
+            Escaleras reconstruidas como rampa (sin picos, huecos ni restos encima); revisa que sigan su trazado:
+            {[...nav.generated.report.stairs].sort((a, b) => b.areaM2 - a.areaM2).slice(0, 5).map(s => (
+              <Box key={`${s.x},${s.y},${s.z}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>sube {s.riseM.toLocaleString('es')} m · {m2(s.areaM2)} · {s.slopeDeg}°</span>
+                <Button size="small" sx={{ minWidth: 0, py: 0 }} onClick={() => nav.focus({ x: s.x, y: s.y, z: s.z })}>Ver</Button>
+              </Box>
+            ))}
+          </Alert>
+        )}
         <FormControlLabel
           sx={{ display: 'flex', mt: 0.5 }}
           control={<Switch size="small" checked={nav.showNavMesh} onChange={e => nav.setShowNavMesh(e.target.checked)} />}
@@ -186,7 +198,8 @@ export default function NavigationPanel({ nav, buildings = [], blockedConnection
       </Box>
       <Typography variant="caption" color="text.secondary" sx={{ px: 1.5 }}>
         Rellenan tramos que el escaneo no capturó y que la regeneración no cierra sola (las rendijas y huecos de hasta
-        ~1 m sí se rellenan solos). Para una escalera usa «Escalera»: con 4 clics arma una rampa que toma la altura de
+        ~1 m sí se rellenan solos). Las escaleras escaneadas con picos en los peldaños, peldaños sueltos o restos encima
+        también se reconstruyen solas al regenerar; usa «Escalera» si una sigue cortada: con 4 clics arma una rampa que toma la altura de
         cada piso y entra 30 cm en ellos, así queda unida aunque el clic caiga en un peldaño. Para otro hueco, «Nuevo»:
         marca su contorno con clics sobre el piso escaneado de alrededor, montándolo unos 30 cm sobre él. Cada punto
         toma la altura del modelo; Shift+clic (o clic sobre el hueco) la del punto anterior. Lo que el escaneo tenga

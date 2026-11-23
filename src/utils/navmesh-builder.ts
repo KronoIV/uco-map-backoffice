@@ -72,6 +72,8 @@ export interface RepairSettings {
   holeMaxArea: number;
   /** Si bajo el hueco hay suelo caminable a menos de esta profundidad (m), es un desnivel real: no se rellena. */
   holeDropProbe: number;
+  /** Reconstruir escaleras y rampas escaneadas con picos, huecos y basura encima como una rampa limpia. */
+  stairs: boolean;
 }
 
 export const DEFAULT_REPAIR: RepairSettings = {
@@ -82,16 +84,26 @@ export const DEFAULT_REPAIR: RepairSettings = {
   holeMaxWidth: 2.4,
   holeMaxArea: 6,
   holeDropProbe: 1.5,
+  stairs: true,
 };
 
 export const NO_REPAIR: RepairSettings = {
   floaterMaxArea: 0, orientation: false, spikeMaxArea: 0, gapMaxWidth: 0, holeMaxWidth: 0, holeMaxArea: 0, holeDropProbe: 0,
+  stairs: false,
 };
 
 export interface OpenHole {
   x: number; y: number; z: number;
   areaM2: number;
   widthM: number;
+}
+
+/** Escalera o rampa reconstruida: centro, desnivel y planta. */
+export interface StairRegion {
+  x: number; y: number; z: number;
+  riseM: number;
+  areaM2: number;
+  slopeDeg: number;
 }
 
 export interface BuildReport {
@@ -112,6 +124,8 @@ export interface BuildReport {
   holesFilledM2: number;
   /** Huecos cerrados que no se rellenaron por anchos o grandes (candidatos a parche manual), de mayor a menor. */
   openHoles: OpenHole[];
+  /** Escaleras y rampas reconstruidas. */
+  stairs: StairRegion[];
   ms: Record<string, number>;
 }
 
@@ -125,6 +139,25 @@ const TRUSTED_FLOOR_M2 = 1.5;
 const CEILING_PROBE_M = 4.5;
 // Lo que sobresale más que esto no es un pico de ruido
 const SPIKE_MAX_RISE_M = 1.2;
+// Escaleras: plano ajustado en una ventana de (2·R + 1)² celdas (1,1 m), con al menos esta fracción de muestras
+const STAIR_FIT_R = 5;
+const STAIR_MIN_SAMPLES = 0.35;
+// Una escalera sube entre ~20° y ~42°; las rampas suaves no necesitan arreglo
+const STAIR_MIN_SLOPE_DEG = 14;
+const STAIR_MAX_SLOPE_DEG = 50;
+// Las muestras a más de esto (celdas) del primer ajuste son picos o basura: se ajusta otra vez sin ellas
+const STAIR_OUTLIER = 3;
+const STAIR_MIN_RISE_M = 0.6;
+const STAIR_MIN_AREA_M2 = 0.6;
+// Cierre de la planta de la escalera (celdas): tapa huecos de picos y de peldaños sin escanear de hasta ~0,6 m
+const STAIR_CLOSE = 3;
+// Lo que sale del peldaño y sube al menos esto es una pared, un poste o una baranda: ese hueco no se tapa
+const STAIR_WALL_M = 1;
+// Suavizado de la rampa: iteraciones (cada una propaga una celda) y peso del plano ajustado frente a los vecinos
+const STAIR_SMOOTH_ITERS = 40;
+const STAIR_DATA_WEIGHT = 1;
+// Un suelo plano conectado de esta planta (celdas) es un piso o un descanso real: nunca se quita
+const PROTECTED_FLOOR_CELLS = 100;
 const EPS = 1e-6;
 // 4 vecinos y luego las diagonales (dx, dz)
 const DIRS: ReadonlyArray<readonly [number, number]> = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
@@ -799,6 +832,334 @@ function closeGaps(g: SpanColumns, compSpans: Int32Array, colOf: Int32Array, o: 
   }
 }
 
+interface StairCluster { gx: number; gz: number; top: number; rise: number; cells: number; slopeDeg: number }
+
+/**
+ * Escaleras y rampas: el escaneo las deja con picos en los peldaños, huecos, peldaños fundidos y restos flotando encima.
+ * recast las corta (cada pico es un obstáculo que la erosión agranda, cada hueco un borde) y flattenSpikes no las ve
+ * porque el suelo de alrededor no está a una sola altura. Aquí cada suelo caminable ajusta un plano robusto en 1,1 m a
+ * la redonda; los que suben entre 14° y 50° y forman una superficie que sube al menos 0,6 m son una escalera. Su planta
+ * se cierra (picos y huecos de hasta ~0,6 m) y, en cada columna, la superficie pasa a la rampa ajustada: los peldaños
+ * se recortan o se rellenan hasta ella y se quita lo que haya en la altura libre encima (picos, barandas fundidas,
+ * basura), salvo pisos y descansos reales (suelos planos grandes) y otras escaleras.
+ */
+function rebuildStairs(g: SpanColumns, H: number, climb: number, cs: number, ch: number) {
+  const { w, h, start, smin, smax, area } = g;
+  const n = g.n;
+  const colOf = g.columns();
+  const walk = (i: number) => area[i] === AREA_WALKABLE;
+  const perCell = cs / ch;
+  const deg = Math.PI / 180;
+  const tanMax = Math.tan(55 * deg) * perCell;
+  const gMin = Math.tan(STAIR_MIN_SLOPE_DEG * deg) * perCell;
+  const gMax = Math.tan(STAIR_MAX_SLOPE_DEG * deg) * perCell;
+  const R = STAIR_FIT_R;
+  const minSamples = Math.ceil(STAIR_MIN_SAMPLES * (2 * R + 1) ** 2);
+  const fit = new Float32Array(n);
+  const grad = new Float32Array(n);
+  const cand = new Uint8Array(n);
+  const sx = new Float32Array((2 * R + 1) ** 2), sz = new Float32Array(sx.length), sh = new Float32Array(sx.length);
+
+  // Mínimos cuadrados h = a + b·x + c·z (Cramer)
+  const plane = (m: number, keep: (k: number) => boolean): [number, number, number] | null => {
+    let N = 0, X = 0, Z = 0, Y = 0, XX = 0, ZZ = 0, XZ = 0, XY = 0, ZY = 0;
+    for (let k = 0; k < m; k++) {
+      if (!keep(k)) continue;
+      const x = sx[k], z = sz[k], y = sh[k];
+      N++; X += x; Z += z; Y += y; XX += x * x; ZZ += z * z; XZ += x * z; XY += x * y; ZY += z * y;
+    }
+    if (N < minSamples) return null;
+    const det = N * (XX * ZZ - XZ * XZ) - X * (X * ZZ - XZ * Z) + Z * (X * XZ - XX * Z);
+    if (Math.abs(det) < 1e-9) return null;
+    return [
+      (Y * (XX * ZZ - XZ * XZ) - X * (XY * ZZ - XZ * ZY) + Z * (XY * XZ - XX * ZY)) / det,
+      (N * (XY * ZZ - XZ * ZY) - Y * (X * ZZ - XZ * Z) + Z * (X * ZY - XY * Z)) / det,
+      (N * (XX * ZY - XY * XZ) - X * (X * ZY - XY * Z) + Y * (X * XZ - XX * Z)) / det,
+    ];
+  };
+  // Suelo caminable de la columna más cercano en altura a `top` (a lo sumo `lim` celdas), o -1
+  const nearest = (nc: number, top: number, lim: number) => {
+    let best = -1, bd = lim + 1;
+    for (let k = start[nc]; k < start[nc + 1]; k++) {
+      if (!walk(k)) continue;
+      const d = Math.abs(smax[k] - top);
+      if (d < bd) { bd = d; best = k; }
+    }
+    return best;
+  };
+
+  for (let i = 0; i < n; i++) {
+    if (!walk(i)) continue;
+    const c = colOf[i], x = c % w, z = (c - x) / w;
+    // Atajo: con los cuatro puntos a R celdas casi a la misma altura es suelo plano
+    let flat = true;
+    for (let d = 0; d < 4 && flat; d++) {
+      const nx = x + DIRS[d][0] * R, nz = z + DIRS[d][1] * R;
+      if (nx < 0 || nz < 0 || nx >= w || nz >= h) { flat = false; break; }
+      const k = nearest(nx + nz * w, smax[i], climb);
+      flat = k >= 0 && Math.abs(smax[k] - smax[i]) <= 1;
+    }
+    if (flat) continue;
+    let m = 0;
+    for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
+      const nx = x + dx, nz = z + dz;
+      if (nx < 0 || nz < 0 || nx >= w || nz >= h) continue;
+      const k = nearest(nx + nz * w, smax[i], Math.ceil(Math.hypot(dx, dz) * tanMax) + 2);
+      if (k < 0) continue;
+      sx[m] = dx; sz[m] = dz; sh[m] = smax[k] - smax[i]; m++;
+    }
+    const first = plane(m, () => true);
+    if (!first) continue;
+    const p = plane(m, k => Math.abs(sh[k] - (first[0] + first[1] * sx[k] + first[2] * sz[k])) <= STAIR_OUTLIER) ?? first;
+    const gr = Math.hypot(p[1], p[2]);
+    if (gr < gMin || gr > gMax) continue;
+    cand[i] = 1;
+    fit[i] = smax[i] + p[0];
+    grad[i] = gr;
+  }
+
+  // Suelos planos grandes que no son escalera (pisos, descansos, la losa de arriba): nunca se recortan ni se quitan
+  const protectedSpan = new Uint8Array(n);
+  const flatLabel = new Int32Array(n).fill(-1);
+  const queue = new Int32Array(n);
+  for (let i0 = 0; i0 < n; i0++) {
+    if (!walk(i0) || cand[i0] || flatLabel[i0] >= 0) continue;
+    let qh = 0, qt = 0;
+    queue[qt++] = i0;
+    flatLabel[i0] = i0;
+    while (qh < qt) {
+      const i = queue[qh++], c = colOf[i], x = c % w, z = (c - x) / w;
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DIRS[d][0], nz = z + DIRS[d][1];
+        if (nx < 0 || nz < 0 || nx >= w || nz >= h) continue;
+        const nc = nx + nz * w;
+        for (let k = start[nc]; k < start[nc + 1]; k++) {
+          if (flatLabel[k] >= 0 || !walk(k) || cand[k] || Math.abs(smax[k] - smax[i]) > 1) continue;
+          flatLabel[k] = i0;
+          queue[qt++] = k;
+        }
+      }
+    }
+    if (qt >= PROTECTED_FLOOR_CELLS) for (let q = 0; q < qt; q++) protectedSpan[queue[q]] = 1;
+  }
+
+  // Superficie en 2,5D: una columna puede tener varias (tramos uno encima de otro en la caja de escalera)
+  const nCol: number[] = [], nH: number[] = [], nFit: number[] = [], nW: number[] = [], nMember: number[] = [], nGrad: number[] = [], nBorn: number[] = [];
+  const nRegion: number[] = [];
+  const alive: number[] = [];
+  const byCol = new Map<number, number[]>();
+  const find = (c: number, top: number) => {
+    let best = -1, bd = climb + 1e-6;
+    for (const v of byCol.get(c) ?? []) {
+      if (!alive[v]) continue;
+      const d = Math.abs(nH[v] - top);
+      if (d <= bd) { bd = d; best = v; }
+    }
+    return best;
+  };
+  const add = (c: number, top: number, member: number, gr: number, born: number) => {
+    const v = nCol.length;
+    nCol.push(c); nH.push(top); nFit.push(top); nW.push(1); nMember.push(member); nGrad.push(gr); nBorn.push(born); nRegion.push(-1); alive.push(1);
+    const list = byCol.get(c);
+    if (list) list.push(v); else byCol.set(c, [v]);
+    return v;
+  };
+  for (let i = 0; i < n; i++) {
+    if (!cand[i]) continue;
+    const v = find(colOf[i], fit[i]);
+    if (v >= 0) {
+      // El cuerpo y la cara de un mismo peldaño: una sola superficie
+      nFit[v] = (nFit[v] * nW[v] + fit[i]) / (nW[v] + 1);
+      nH[v] = nFit[v];
+      nW[v]++;
+    } else add(colOf[i], fit[i], 1, grad[i], -1);
+  }
+  const neighbor = (v: number, d: number) => {
+    const c = nCol[v], x = c % w + DIRS[d][0], z = (c - c % w) / w + DIRS[d][1];
+    return x < 0 || z < 0 || x >= w || z >= h ? -1 : x + z * w;
+  };
+  // Cierre: dilatar K columnas (altura = media de quien la propone) y erosionar K solo lo añadido
+  const K = STAIR_CLOSE;
+  const wallCells = Math.round(STAIR_WALL_M / ch);
+  const hasWall = (c: number, top: number) => {
+    for (let k = start[c]; k < start[c + 1]; k++) if (smin[k] <= top + climb && smax[k] >= top + wallCells) return true;
+    return false;
+  };
+  for (let it = 0; it < K; it++) {
+    const count = nCol.length;
+    for (let v = 0; v < count; v++) {
+      if (!alive[v]) continue;
+      for (let d = 0; d < 8; d++) {
+        const nc = neighbor(v, d);
+        if (nc < 0) continue;
+        const u = find(nc, nH[v]);
+        if (u >= 0) {
+          if (!nMember[u] && nBorn[u] === it) {
+            nH[u] = (nH[u] * nW[u] + nH[v]) / (nW[u] + 1);
+            nFit[u] = nH[u];
+            nW[u]++;
+          }
+          continue;
+        }
+        if (hasWall(nc, nH[v])) continue;
+        add(nc, nH[v], 0, 0, it);
+      }
+    }
+  }
+  for (let it = 0; it < K; it++) {
+    const dead: number[] = [];
+    for (let v = 0; v < nCol.length; v++) {
+      if (!alive[v] || nMember[v]) continue;
+      for (let d = 0; d < 8; d++) {
+        const nc = neighbor(v, d);
+        if (nc < 0 || find(nc, nH[v]) < 0) { dead.push(v); break; }
+      }
+    }
+    for (const v of dead) alive[v] = 0;
+  }
+
+  // Escaleras: superficies (ya cerradas) que suben lo suficiente y llegan a un suelo abajo y a otro arriba; un montón
+  // de basura inclinado solo toca el de abajo
+  const stats: Array<{ lo: number; hi: number; grad: number }> = [];
+  const comp = new Int32Array(nCol.length).fill(-1);
+  const nodeQueue = new Int32Array(nCol.length);
+  const realFloor = (c: number, top: number) => {
+    for (let k = start[c]; k < start[c + 1]; k++) if (walk(k) && !cand[k] && Math.abs(smax[k] - top) <= climb) return true;
+    return false;
+  };
+  for (let v0 = 0; v0 < nCol.length; v0++) {
+    if (!alive[v0] || comp[v0] >= 0) continue;
+    let qh = 0, qt = 0;
+    nodeQueue[qt++] = v0;
+    comp[v0] = v0;
+    let lo = Infinity, hi = -Infinity, gsum = 0, members = 0;
+    while (qh < qt) {
+      const v = nodeQueue[qh++];
+      lo = Math.min(lo, nH[v]);
+      hi = Math.max(hi, nH[v]);
+      if (nMember[v]) { gsum += nGrad[v]; members++; }
+      for (let d = 0; d < 8; d++) {
+        const nc = neighbor(v, d);
+        const u = nc < 0 ? -1 : find(nc, nH[v]);
+        if (u < 0 || comp[u] >= 0) continue;
+        comp[u] = v0;
+        nodeQueue[qt++] = u;
+      }
+    }
+    let low = false, high = false;
+    for (let q = 0; q < qt && !(low && high); q++) {
+      const v = nodeQueue[q];
+      const nearLow = nH[v] <= lo + climb, nearHigh = nH[v] >= hi - climb;
+      if (!nearLow && !nearHigh) continue;
+      for (let d = 0; d < 8; d++) {
+        const nc = neighbor(v, d);
+        if (nc < 0 || !realFloor(nc, nH[v])) continue;
+        if (nearLow) low = true;
+        if (nearHigh) high = true;
+      }
+    }
+    const keep = (hi - lo) * ch >= STAIR_MIN_RISE_M && qt * cs * cs >= STAIR_MIN_AREA_M2 && low && high && members > 0;
+    for (let q = 0; q < qt; q++) {
+      const v = nodeQueue[q];
+      if (keep) nRegion[v] = stats.length; else alive[v] = 0;
+    }
+    if (keep) stats.push({ lo, hi, grad: gsum / members });
+  }
+
+  // Suavizado con los pisos de alrededor como borde: la rampa empalma con el descanso y el piso sin escalón
+  const links: number[][] = [];
+  const border: number[] = [], borderN: number[] = [];
+  for (let v = 0; v < nCol.length; v++) {
+    const list: number[] = [];
+    let bs = 0, bn = 0;
+    if (alive[v]) {
+      for (let d = 0; d < 4; d++) {
+        const nc = neighbor(v, d);
+        if (nc < 0) continue;
+        const u = find(nc, nH[v]);
+        if (u >= 0) { list.push(u); continue; }
+        const k = nearest(nc, nH[v], climb);
+        if (k >= 0) { bs += smax[k]; bn++; }
+      }
+    }
+    links.push(list);
+    border.push(bs);
+    borderN.push(bn);
+  }
+  let cur = Float64Array.from(nH);
+  for (let it = 0; it < STAIR_SMOOTH_ITERS; it++) {
+    const next = cur.slice();
+    for (let v = 0; v < nCol.length; v++) {
+      if (!alive[v]) continue;
+      const lambda = nMember[v] ? STAIR_DATA_WEIGHT : 0;
+      let sum = lambda * nFit[v] + border[v], cnt = lambda + borderN[v];
+      for (const u of links[v]) { sum += cur[u]; cnt++; }
+      if (cnt > 0) next[v] = sum / cnt;
+    }
+    cur = next;
+  }
+
+  // Cada columna toma sus superficies: el suelo más cercano pasa a la rampa, lo de encima (picos, basura) se quita
+  const quads: Array<{ c: number; top: number }> = [];
+  const cells = new Array<number>(stats.length).fill(0);
+  const sumX = new Array<number>(stats.length).fill(0), sumZ = new Array<number>(stats.length).fill(0);
+  for (const [c, list] of byCol) {
+    const surfaces = list.filter(v => alive[v]).map(v => ({ s: Math.round(cur[v]), r: nRegion[v] }))
+      .sort((a, b) => a.s - b.s)
+      .filter((e, i, arr) => i === 0 || e.s - arr[i - 1].s > climb);
+    if (!surfaces.length) continue;
+    const S = surfaces.map(e => e.s);
+    const floorOf = new Map<number, number>();
+    const action = new Int8Array(start[c + 1] - start[c]); // 0 = se queda, 1 = suelo, 2 = se quita
+    for (let k = start[c]; k < start[c + 1]; k++) {
+      const a = k - start[c];
+      if (protectedSpan[k]) continue;
+      let j = -1;
+      for (let q = 0; q < S.length; q++) if (Math.abs(smax[k] - S[q]) <= climb && (j < 0 || Math.abs(smax[k] - S[q]) < Math.abs(smax[k] - S[j]))) j = q;
+      if (j < 0) for (let q = 0; q < S.length && j < 0; q++) if (smin[k] < S[q] - climb && smax[k] > S[q] + climb) j = q;
+      if (j >= 0) {
+        // El más alto de los que caen en esa superficie es su suelo; los demás, si son delgados, sobran
+        const prev = floorOf.get(j);
+        if (prev !== undefined) action[prev - start[c]] = smin[prev] >= S[j] - climb ? 2 : 0;
+        floorOf.set(j, k);
+        action[a] = 1;
+      } else if (S.some(s => smin[k] <= s + H && smax[k] > s + climb)) {
+        action[a] = 2;
+      }
+    }
+    const done = new Set<number>();
+    for (const [j, k] of floorOf) {
+      if (action[k - start[c]] !== 1) continue;
+      let above = Infinity;
+      for (let q = k + 1; q < start[c + 1]; q++) if (action[q - start[c]] !== 2) { above = smin[q]; break; }
+      const top = Math.min(S[j], above - 1);
+      if (top <= smin[k]) { action[k - start[c]] = 2; continue; }
+      g.setTop(k, top);
+      g.setArea(k, AREA_WALKABLE);
+      done.add(j);
+    }
+    for (let k = start[c]; k < start[c + 1]; k++) {
+      const a = k - start[c];
+      if (protectedSpan[k]) {
+        for (let j = 0; j < S.length; j++) if (Math.abs(smax[k] - S[j]) <= climb) done.add(j);
+      } else if (action[a] === 2) g.unlink(c, k);
+    }
+    for (let j = 0; j < S.length; j++) {
+      if (!done.has(j)) quads.push({ c, top: S[j] });
+      const r = surfaces[j].r;
+      cells[r]++;
+      sumX[r] += c % w;
+      sumZ[r] += (c - c % w) / w;
+    }
+  }
+  const regions: StairCluster[] = stats.map((st, r) => ({
+    gx: Math.round(sumX[r] / Math.max(1, cells[r])), gz: Math.round(sumZ[r] / Math.max(1, cells[r])),
+    top: (st.lo + st.hi) / 2, rise: st.hi - st.lo, cells: cells[r],
+    slopeDeg: Math.atan(st.grad / perCell) / deg,
+  }));
+  return { quads, regions };
+}
+
 function fillGeometry(g: SpanColumns, fills: Array<{ c: number; top: number }>, bmin: number[], cs: number, ch: number) {
   const e = cs * 0.01;
   const pos: number[] = [];
@@ -844,7 +1205,7 @@ export function generateNavMesh(
   const cellArea = cs * cs;
   const report: BuildReport = {
     triangles: rawIndices.length / 3, droppedTriangles: 0, repaired: false, floaters: { clusters: 0, spans: 0 }, flipped: false,
-    invertedFloorM2: 0, invertedRejectedM2: 0, spikes: 0, gapsClosedM2: 0, holesFilled: 0, holesFilledM2: 0, openHoles: [], ms,
+    invertedFloorM2: 0, invertedRejectedM2: 0, spikes: 0, gapsClosedM2: 0, holesFilled: 0, holesFilledM2: 0, openHoles: [], stairs: [], ms,
   };
 
   const clean = sanitize(positions, rawIndices);
@@ -923,6 +1284,23 @@ export function generateNavMesh(
             widthM: +(o.halfWidth * 2 * cs).toFixed(1),
           }));
         lap('gaps');
+      }
+      if (repair.stairs) {
+        g.read();
+        const stairs = rebuildStairs(g, cells.height, cells.climb, cs, ch);
+        if (stairs.quads.length) {
+          const fill = fillGeometry(g, stairs.quads, bmin, cs, ch);
+          rasterize(ctx, hf, fill.positions, fill.indices, new Uint8Array(fill.indices.length / 3).fill(AREA_WALKABLE), cells.climb);
+        }
+        report.stairs = stairs.regions.map(r => ({
+          x: +(bmin[0] + (r.gx + 0.5) * cs).toFixed(2),
+          y: +(bmin[1] + r.top * ch).toFixed(2),
+          z: +(bmin[2] + (r.gz + 0.5) * cs).toFixed(2),
+          riseM: +(r.rise * ch).toFixed(2),
+          areaM2: +(r.cells * cellArea).toFixed(1),
+          slopeDeg: Math.round(r.slopeDeg),
+        }));
+        lap('stairs');
       }
     }
 
