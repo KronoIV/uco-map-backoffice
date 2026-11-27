@@ -6,7 +6,7 @@ import {
   Typography,
 } from '@mui/material';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import MapViewer, { type ViewerMarker } from '../../components/poi-editor/MapViewer';
+import MapViewer, { type ViewerGizmo, type ViewerMarker } from '../../components/poi-editor/MapViewer';
 import { vpsService } from '../../services/vpsService';
 import { fmtDateTime, fmtPercent } from '../../utils/analyticsFormat';
 import type { ArPoint, MapMesh } from '../../types';
@@ -18,6 +18,7 @@ import {
 interface Draft { include: boolean; scanId: string | null; pose: VpsPose }
 interface Pair { local: Vec3; world: Vec3 }
 type View = 'all' | 'selected' | 'others';
+type GizmoMode = 'off' | 'translate' | 'rotate';
 
 const NO_LIST: never[] = [];
 const noop = () => {};
@@ -72,6 +73,7 @@ export default function VpsAlignmentTab({ mapSetId, detail, notify }: VpsTabProp
   const [selectedId, setSelectedId] = useState<string | null>(detail.maps[0]?.id ?? null);
   const [dof, setDof] = useState<4 | 6>(4);
   const [view, setView] = useState<View>('all');
+  const [gizmoMode, setGizmoMode] = useState<GizmoMode>('off');
   const [lastPick, setLastPick] = useState<ArPoint | null>(null);
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [pendingLocal, setPendingLocal] = useState<Vec3 | null>(null);
@@ -237,6 +239,10 @@ export default function VpsAlignmentTab({ mapSetId, detail, notify }: VpsTabProp
     setPose({ ...selPose, rotation: quatFromAngles(a.yaw, a.pitch, a.roll) });
   };
   const minPairs = dof === 4 ? 2 : 3;
+  const gizmo = useMemo<ViewerGizmo | null>(() => {
+    const m = detail.maps.find(x => x.id === selectedId);
+    return m && gizmoMode !== 'off' ? { name: m.name, mode: gizmoMode, tilt: dof === 6 } : null;
+  }, [detail.maps, selectedId, gizmoMode, dof]);
   const selectedScans = selected ? scansByMap[selected.id] ?? NO_LIST : NO_LIST;
   const movedPublished = !!(selected && head?.poses[selected.id] && selPose && !samePose(head.poses[selected.id], selPose));
 
@@ -436,6 +442,16 @@ export default function VpsAlignmentTab({ mapSetId, detail, notify }: VpsTabProp
               <ToggleButton value={6}>6 GdL</ToggleButton>
             </ToggleButtonGroup>
           </Tooltip>
+          <Tooltip title="Mover o girar el mapa seleccionado arrastrando las flechas o los anillos en el visor">
+            <ToggleButtonGroup
+              size="small" exclusive value={gizmoMode} disabled={!selected}
+              onChange={(_, v: GizmoMode | null) => v && setGizmoMode(v)}
+            >
+              <ToggleButton value="off">Sin gizmo</ToggleButton>
+              <ToggleButton value="translate">Mover</ToggleButton>
+              <ToggleButton value="rotate">Girar</ToggleButton>
+            </ToggleButtonGroup>
+          </Tooltip>
           {bounds && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 220, flex: 1 }}>
               <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>Corte de altura</Typography>
@@ -478,11 +494,13 @@ export default function VpsAlignmentTab({ mapSetId, detail, notify }: VpsTabProp
             onBounds={handleBounds}
             onProgress={handleProgress}
             onError={notify}
+            gizmo={gizmo}
+            onGizmoChange={(position, rotation) => setPose({ position, rotation })}
           />
         </Box>
         <Typography variant="caption" color="text.secondary" sx={{ px: 1.5, py: 0.75 }}>
           Arrastra para rotar · clic derecho para desplazar · rueda para zoom · WASD para moverte · clic en el modelo
-          para tomar un punto. Los cambios de pose se ven al instante; nada cambia en la app hasta crear la revisión,
+          para tomar un punto · con «Mover» o «Girar», arrastra las flechas o anillos del mapa seleccionado. Los cambios de pose se ven al instante; nada cambia en la app hasta crear la revisión,
           procesarla y publicarla.
         </Typography>
       </Paper>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -66,6 +67,14 @@ export interface ViewerBlock {
   draft?: boolean;
 }
 
+export interface ViewerGizmo {
+  /** Nombre de la malla que se mueve (MapMesh.name). */
+  name: string;
+  mode: 'translate' | 'rotate';
+  /** Girar también en X y Z; si no, solo alrededor del eje vertical. */
+  tilt: boolean;
+}
+
 export interface MapViewerApi {
   /** Triángulos de las mallas cargadas en el espacio del mapa (entrada para recast). */
   collectGeometry(): { positions: Float32Array; indices: Uint32Array; meshNames: string[] };
@@ -108,6 +117,8 @@ interface MapViewerProps {
   onSelectionChange?: (s: SelectionSummary) => void;
   /** Ediciones guardadas que ya no casan con su malla (el mapa cambió). */
   onEditMismatch?: (keys: string[]) => void;
+  gizmo?: ViewerGizmo | null;
+  onGizmoChange?: (position: ArPoint, rotation: { x: number; y: number; z: number; w: number }) => void;
 }
 
 const CACHE_NAME = 'ucomap-scan-meshes';
@@ -191,6 +202,9 @@ class ViewerEngine {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(55, 1, 0.1, 3000);
   readonly controls: OrbitControls;
+  private readonly gizmo: TransformControls;
+  // El soltar del gizmo no debe contar como clic para tomar un punto
+  private gizmoUsed = false;
   readonly meshRoot = new THREE.Group();
   readonly markerRoot = new THREE.Group();
   readonly connRoot = new THREE.Group();
@@ -312,6 +326,23 @@ class ViewerEngine {
     this.controls.enableDamping = true;
     this.controls.addEventListener('change', () => { this.cameraMovedAt = performance.now(); });
 
+    this.gizmo = new TransformControls(this.camera, this.renderer.domElement);
+    this.gizmo.setSpace('world');
+    this.gizmo.addEventListener('dragging-changed', e => {
+      this.controls.enabled = !e.value;
+      if (e.value) this.gizmoUsed = true;
+    });
+    this.gizmo.addEventListener('objectChange', () => {
+      const o = this.gizmo.object;
+      if (!o) return;
+      const q = o.quaternion;
+      this.props.onGizmoChange?.(
+        { x: round(o.position.x), y: round(o.position.y), z: round(o.position.z) },
+        { x: q.x, y: q.y, z: q.z, w: q.w },
+      );
+    });
+    this.scene.add(this.gizmo.getHelper());
+
     this.draco = new DRACOLoader().setDecoderPath('/draco/');
     this.loader = new GLTFLoader().setDRACOLoader(this.draco);
 
@@ -366,6 +397,18 @@ class ViewerEngine {
       else if (!this.pending.has(mesh.name)) void this.loadMesh(mesh);
     }
     this.emitBounds();
+    this.setGizmo();
+  }
+
+  setGizmo() {
+    const g = this.props.gizmo;
+    const obj = g ? this.loaded.get(g.name) : undefined;
+    if (!g || !obj) { this.gizmo.detach(); return; }
+    if (this.gizmo.object !== obj) this.gizmo.attach(obj);
+    this.gizmo.setMode(g.mode);
+    const yawOnly = g.mode === 'rotate' && !g.tilt;
+    this.gizmo.showX = !yawOnly;
+    this.gizmo.showZ = !yawOnly;
   }
 
   private async loadMesh(mesh: MapMesh) {
@@ -392,6 +435,7 @@ class ViewerEngine {
       this.model.register(mesh.name, gltf.scene);
       this.applyScanEdits();
       this.emitBounds();
+      this.setGizmo();
       if (!this.framed) this.frameAll();
     } catch (err) {
       this.props.onError(`No se pudo cargar el mapa ${mesh.name}: ${err instanceof Error ? err.message : err}`);
@@ -1014,6 +1058,7 @@ class ViewerEngine {
   private handleUp = (e: PointerEvent) => {
     const start = this.downAt;
     this.downAt = null;
+    if (this.gizmoUsed) { this.gizmoUsed = false; return; }
     if (this.drag) {
       const kind = this.drag.kind;
       if (this.renderer.domElement.hasPointerCapture(e.pointerId)) this.renderer.domElement.releasePointerCapture(e.pointerId);
@@ -1074,6 +1119,9 @@ class ViewerEngine {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.releaseKeys);
+    this.gizmo.detach();
+    this.gizmo.getHelper().removeFromParent();
+    this.gizmo.dispose();
     this.controls.dispose();
     for (const obj of this.loaded.values()) this.disposeObject(obj);
     this.markerMat.forEach(m => m.dispose());
@@ -1142,6 +1190,7 @@ export default function MapViewer(props: MapViewerProps) {
   useEffect(() => { engineRef.current?.applyScanEdits(); }, [props.scanEdits]);
   useEffect(() => { engineRef.current?.model.setShowRemoved(!!props.showRemoved); }, [props.showRemoved]);
   useEffect(() => { if (props.focus) engineRef.current?.focusOn(props.focus); }, [props.focus]);
+  useEffect(() => { engineRef.current?.setGizmo(); }, [props.gizmo]);
 
   return <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }} />;
 }
