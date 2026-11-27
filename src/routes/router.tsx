@@ -12,6 +12,7 @@ import CampusPage from '../pages/CampusPage';
 import EventsPage from '../pages/EventsPage';
 import UsersPage from '../pages/users/UsersPage';
 import HelpPage from '../pages/help/HelpPage';
+import VpsPage from '../pages/vps/VpsPage';
 import NotFoundPage from '../pages/NotFoundPage';
 
 const router = createBrowserRouter([
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
           // Los puntos y caminos se administran en el mapa
           { path: 'nodes', element: <Navigate to="/map" replace /> },
           { path: 'campus', element: <CampusPage /> },
+          { path: 'vps', element: <VpsPage /> },
           { path: 'events', element: <EventsPage /> },
           { path: 'ar-points', element: <Navigate to="/map?tab=ar" replace /> },
           { path: 'settings', element: <SettingsPage /> },

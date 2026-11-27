@@ -29,8 +29,6 @@ export function useUpdateSetting() {
       qc.setQueryData<AppSetting[]>(QUERY_KEY, prev =>
         prev ? prev.map(s => (s.key === updated.key ? updated : s)) : [updated]
       );
-      // El cupo de MultiSet muestra si la guía con cámara está encendida
-      qc.invalidateQueries({ queryKey: ['multiset-usage'] });
     },
   });
 }

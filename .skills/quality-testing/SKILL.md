@@ -41,9 +41,11 @@ propiedades de parámetro) y `verbatimModuleSyntax` (importa tipos con `import t
 1. Login, cierre de sesión y expiración (borra la cookie `ucomap_token` → debe volver a `/login`).
 2. CRUD de la página tocada y su efecto en la app (`GET /api/campus` de la app refleja los cambios).
 3. Mapa: crear nodo/arista, Vista usuario calcula ruta.
-4. Interior AR (solo si hay credenciales MultiSet en el backend local): cargar mallas, ubicar punto, regenerar
-   navmesh y publicar **en local**.
-5. Consola del navegador sin errores nuevos.
+4. Interior AR (con el VPS propio local y un build publicado):
+   cargar mallas, ubicar punto, regenerar navmesh y publicar **en local**.
+5. Si tocaste la página VPS propio: contra un `vps-server` local (nunca el de producción), revisar las pestañas y una
+   prueba de localización con una foto.
+6. Consola del navegador sin errores nuevos.
 
 ## Si se agregan pruebas automáticas
 

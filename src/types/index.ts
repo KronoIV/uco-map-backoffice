@@ -75,7 +75,7 @@ export interface Building {
 }
 
 // ──────────────── Room ────────────────────────────────────────
-/** Posición en metros dentro del mapa MultiSet (mismo espacio que la escena de Mattercraft). */
+/** Posición en metros dentro del espacio del mapa del VPS (el mismo de los escaneos del campus). */
 export interface ArPoint {
   x: number;
   y: number;
@@ -95,44 +95,13 @@ export interface Room {
   active: boolean;
 }
 
-// ──────────────── MultiSet ─────────────────────────────────────
+// ──────────────── Modelos 3D (escaneos del VPS) ─────────────────
+/** Malla de un escaneo con URL firmada y su pose en el espacio del mapa (mano derecha, Y arriba). */
 export interface MapMesh {
   name: string;
   url: string;
   position: { x: number; y: number; z: number };
   rotation: { qx: number; qy: number; qz: number; qw: number };
-}
-
-export type MultiSetPlan = 'FREE' | 'LITE' | 'PLUS' | 'CUSTOM';
-
-/** Estimación del cupo de MultiSet hecha por el backend sin llamar a MultiSet. */
-export interface MultiSetUsage {
-  plan: MultiSetPlan;
-  limit: number;
-  monthly: boolean;
-  resetDay: number;
-  autoDisablePercent: number;
-  periodStart: string | null;
-  periodEnd: string | null;
-  used: number;
-  percent: number;
-  baselineUsed: number | null;
-  baselineAt: string | null;
-  appCalls: number;
-  backendCalls: number;
-  arEnabled: boolean;
-  autoDisabledAt: string | null;
-  level: 'unconfigured' | 'ok' | 'warning' | 'critical' | 'disabled';
-}
-
-export interface MultiSetUsageRequest {
-  plan: MultiSetPlan;
-  limit: number;
-  monthly: boolean;
-  resetDay: number;
-  autoDisablePercent: number;
-  /** Uso que muestra ahora el portal; null = mantener el anterior. */
-  portalUsed: number | null;
 }
 
 // ──────────────── Navegación (navmesh) ─────────────────────────

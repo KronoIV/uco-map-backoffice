@@ -204,7 +204,7 @@ export default function TripsPage() {
               ? `Se ubican en ${fmtDurationLong(s.medianLocalizedMs)} · ${fmtNumber(s.avgVpsFailures, 1)} fallos de media`
                 + (s.avgVpsCalls != null ? ` · ${fmtNumber(s.avgVpsCalls, 1)} llamadas VPS de media` : '')
               : 'Ningún recorrido llegó a ubicarse con la cámara'}
-            info={`Recorridos terminados que abrieron la guía con cámara. Ubicarse = primera ubicación lograda por la cámara (VPS). Llamadas VPS = consultas a la API de MultiSet (${fmtNumber(s?.totalVpsCalls)} en el periodo).`} />
+            info={`Recorridos terminados que abrieron la guía con cámara. Ubicarse = primera ubicación lograda por la cámara (VPS). Llamadas VPS = consultas al VPS propio (${fmtNumber(s?.totalVpsCalls)} en el periodo).`} />
         </Grid>
       </Grid>
 

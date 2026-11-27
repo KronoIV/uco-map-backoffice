@@ -325,7 +325,7 @@ export default function HelpPage() {
       <Box>
         <PageHeader
           title="Ayuda"
-          subtitle="Cómo usar el panel paso a paso y recomendaciones para mapear con MultiSet. La instalación, el código y el servidor están en el Manual técnico UCO MAP."
+          subtitle="Cómo usar el panel paso a paso y recomendaciones para escanear el campus. La instalación, el código y el servidor están en el Manual técnico UCO MAP."
         />
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '240px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
@@ -384,7 +384,7 @@ export default function HelpPage() {
             )}
 
             <Typography variant="caption" sx={{ color: brand.text3, display: 'block', pb: 2 }}>
-              Basado en el {HELP_SOURCE.title} ({HELP_SOURCE.date}), de {HELP_SOURCE.authors}, y en la documentación de MultiSet.
+              Basado en el {HELP_SOURCE.title} ({HELP_SOURCE.date}), de {HELP_SOURCE.authors}.
             </Typography>
           </Box>
         </Box>

@@ -10,7 +10,6 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import { useForm, Controller } from 'react-hook-form';
 import PageHeader from '../components/PageHeader';
-import MultiSetUsageCard from '../components/MultiSetUsageCard';
 import { useSettings, useUpdateSetting, useCreateSetting, useDeleteSetting } from '../hooks/useSettings';
 import { resolveApiError } from '../services/api';
 import type { AppSetting, SettingType } from '../types';
@@ -151,8 +150,6 @@ export default function SettingsPage() {
       />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 820 }}>
-
-        <MultiSetUsageCard onMessage={setSnackbar} />
 
         {/* ── Feature Flags ──────────────────────────────────────────────── */}
         <Paper sx={{ borderRadius: '16px', border: `1px solid ${brand.border}`, boxShadow: '0 1px 3px rgba(30, 31, 28, 0.05)', p: 3 }}>

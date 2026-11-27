@@ -39,17 +39,18 @@ el `routeMap` de `Navbar.tsx`.
 ## Carpetas de `src/`
 
 ```
-pages/         Una página por ruta (algunas en subcarpetas: dashboard/, device-sessions/, users/, help/)
+pages/         Una página por ruta (algunas en subcarpetas: dashboard/, device-sessions/, users/, help/, vps/)
 components/    Reutilizables: AuthShell/AuthField (pantallas de acceso), PageHeader, SectionTabs, StatCard,
-               ProtectedRoute, MultiSetUsageCard; analytics/ (gráficas propias), device-sessions/, map3d/
+               ProtectedRoute; analytics/ (gráficas propias), device-sessions/, map3d/
                (CampusMap3D con MapLibre), poi-editor/ (visor three.js y editores del interior)
-services/      Un módulo por recurso del backend (axios). api.ts = cliente común
-hooks/         Hooks de React Query y utilidades (useSettings, useUsers, useDeviceSessions, useMultiSetUsage,
+services/      Un módulo por recurso del backend (axios). api.ts = cliente común. vpsService.ts habla directo con
+               el VPS propio (fetch con token de /api/vps/admin-token)
+hooks/         Hooks de React Query y utilidades (useSettings, useUsers, useDeviceSessions,
                usePeriod, useCampusOsm)
 context/       AuthContext (sesión)
 layouts/       AppLayout, Sidebar, Navbar
 routes/        router.tsx
-types/         Tipos del dominio (index.ts) y de analítica (analytics.ts)
+types/         Tipos del dominio (index.ts), de analítica (analytics.ts) y del VPS propio (vps.ts)
 utils/         Lógica sin React: rutas exteriores, OSM, catálogo de POI, navmesh, parches, ediciones, formato
 workers/       navmeshWorker.ts (genera el navmesh fuera del hilo principal)
 theme/         brand.ts (tokens de marca + paleta de gráficas), theme.ts (tema MUI), uco-brand.css
@@ -62,7 +63,7 @@ assets/        Logos, fuentes TeX Gyre Heros (licencia GUST), mascota
 - **Datos del servidor con React Query.** Las páginas llaman `useQuery({ queryKey: ['rooms'], queryFn: roomService.getAll })`
   y `useMutation` con `qc.invalidateQueries({ queryKey: [...] })` o `qc.setQueryData` al terminar. Las claves
   usadas son nombres simples (`['rooms']`, `['nodes']`, `['buildings']`, `['events']`, `['settings']`,
-  `['multiset-usage']`...). Reutiliza la misma clave para que la caché se comparta entre páginas.
+  `['editor-meshes']`...). Reutiliza la misma clave para que la caché se comparta entre páginas.
 - **Servicios** = objetos con funciones que devuelven `api.get<T>(...).then(r => r.data)` (el sobre ya viene quitado).
 - **Formularios** con React Hook Form (`register`, `Controller` para componentes MUI).
 - **UI** con componentes MUI y `sx`; colores de `theme/brand.ts` (verde UCO `#008b50`, `greenStrong` `#007d48` para

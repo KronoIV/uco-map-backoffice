@@ -10,11 +10,13 @@ description: Contexto del panel de administración de UCO MAP (React 19 + Vite 8
 Panel web para el equipo que mantiene UCO MAP. Permite:
 
 - Gestionar **edificios y salones** (Campus), **eventos** del campus, **usuarios** administradores y **parámetros**
-  de la app (Configuración, incluida la cuota de MultiSet).
+  de la app (Configuración).
 - Editar el **grafo exterior** (nodos, puertas, puntos de interés, caminos) sobre un mapa 2D/3D y previsualizar rutas
   como las ve el estudiante (pestañas Caminos / Vista usuario de `/map`).
-- Ubicar **puntos AR** de salones y generar/publicar el **navmesh** interior sobre las mallas 3D de MultiSet
+- Ubicar **puntos AR** de salones y generar/publicar el **navmesh** interior sobre las mallas 3D del VPS propio
   (pestaña Interior AR de `/map`).
+- Administrar el **VPS propio** (`/vps`): mapas y escaneos, alineación, revisiones, builds y evaluación,
+  publicación/rollback y prueba de localización con fotos.
 - Consultar **analítica** (Dashboard) y **actividad** (dispositivos y recorridos, con exportación CSV).
 
 No lo usan los estudiantes. Depende por completo del backend (`backend/`).
@@ -45,7 +47,7 @@ No hay script de pruebas automáticas.
   `.env` y `*.local` están en `.gitignore`. Es pública: queda dentro del JavaScript compilado.
 - `vite.config.ts` solo registra el plugin de React (puerto por defecto 5173, sin proxy).
 - `public/_redirects` (`/* /index.html 200`) hace que el hosting (Netlify) sirva la SPA en cualquier ruta.
-- `public/draco/` contiene los decodificadores Draco para las mallas GLB comprimidas de MultiSet.
+- `public/draco/` contiene los decodificadores Draco para las mallas GLB comprimidas de los escaneos.
 
 ## Usuario para entrar en local
 

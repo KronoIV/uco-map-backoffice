@@ -17,7 +17,8 @@ interior, eventos, usuarios y parámetros, y se consulta la analítica de uso.
 | Eventos | `/events` | Eventos que la app anuncia en su inicio |
 | Actividad | `/sessions` | Dispositivos (en vivo por SSE) y recorridos (con exportación CSV) |
 | Usuarios | `/users` | Administradores del panel |
-| Configuración | `/settings` | Parámetros de la app (p. ej. activar la guía AR) y cuota de MultiSet |
+| Configuración | `/settings` | Parámetros de la app (p. ej. activar la guía AR) |
+| VPS propio | `/vps` | Mapas y escaneos del VPS propio (`vps-server`), alineación, builds y evaluación, publicación y prueba con fotos |
 | Ayuda | `/help` | Manual de uso del panel (contenido en `src/pages/help/helpContent.ts`, capturas en `src/assets/help/`) |
 
 También incluye login, «olvidé mi contraseña» y restablecer contraseña. No lo usan los estudiantes.
@@ -118,9 +119,9 @@ uco-map-admin/
 │   ├── main.tsx, App.tsx    Arranque y providers (React Query, tema MUI, Auth, Router)
 │   ├── routes/router.tsx    Rutas públicas y protegidas
 │   ├── layouts/             AppLayout, Sidebar (menú), Navbar (migas)
-│   ├── pages/               Una página por sección
+│   ├── pages/               Una página por sección (vps/ = VPS propio)
 │   ├── components/          Componentes reutilizables; poi-editor/ (interior AR) y map3d/ (MapLibre)
-│   ├── services/            Cliente Axios (api.ts) y un servicio por recurso del backend
+│   ├── services/            Cliente Axios (api.ts), un servicio por recurso del backend y vpsService.ts (VPS propio)
 │   ├── hooks/               Hooks de React Query y utilidades
 │   ├── context/             AuthContext (sesión)
 │   ├── types/               Tipos del dominio (espejo del JSON del backend)
@@ -143,8 +144,11 @@ uco-map-admin/
   `/api/settings`, `/api/events/active`, `/api/navigation/navmesh`...). Comparte con la app copias idénticas de
   `utils/campus-routing.ts`, `campus-osm.ts`, `poi-catalog.ts` y `navmesh-input.ts`, y la versión de
   `recast-navigation`.
+- **VPS propio:** `src/services/vpsService.ts` pide `POST /api/vps/admin-token` al backend y luego llama **directo**
+  al VPS (`baseUrl` de la respuesta; los escaneos de cientos de MB no pasan por el backend). Por eso el origen del
+  panel debe estar en `VPS_CORS_ORIGINS` del VPS. Arranque local en `vps-server/README.md`.
 - **Servicios externos desde el navegador:** OpenStreetMap (Overpass / API 0.6), OpenFreeMap, ArcGIS World Imagery,
-  unpkg (iconos de Leaflet) y las URLs de mallas 3D de MultiSet que entrega el backend.
+  unpkg (iconos de Leaflet) y las URLs firmadas de las mallas 3D que entrega el VPS propio.
 
 ## 12. Problemas frecuentes
 
@@ -154,7 +158,9 @@ uco-map-admin/
 | `Network Error` / CORS en consola | El backend no está corriendo o la URL está mal (sin `/` final, puerto correcto). |
 | Vuelve a `/login` constantemente | Token vencido (24 h), 401 del backend o cookie bloqueada. Revisa la pestaña Red. |
 | «Credenciales inválidas» en local | Base nueva: usa el usuario sembrado del backend; base copiada: usa un usuario de esa base. |
-| Interior AR no carga mallas | El backend local no tiene credenciales MultiSet (`/api/multiset/map-meshes` falla). Normal sin ellas. |
+| Interior AR no carga mallas | El VPS propio no está disponible (sin arrancar o sin build publicado); el aviso de la página dice por qué falló. |
+| Página VPS propio: «no configurado» | El backend no tiene `VPS_BASE_URL` / `VPS_TOKEN_SECRET` (`/api/vps/admin-token` responde 503). |
+| Página VPS propio: error de CORS o de red | El VPS no está corriendo o el origen del panel (p. ej. `http://localhost:5173`) falta en `VPS_CORS_ORIGINS`. |
 | `npm run check:routing` dice «differ» | Un archivo compartido cambió en un solo repo: copia la versión correcta al otro. |
 | `npm ci` falla por versión de Node | Usa Node 22 (`node -v`). |
 | Advertencia «Some chunks are larger than 500 kB» | Esperada (bundle ~3,3 MB); no impide el build. |

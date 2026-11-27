@@ -14,7 +14,7 @@ import { MODE_COLORS } from '../components/poi-editor/sceneEditing';
 import { useNavigationEditor } from '../components/poi-editor/useNavigationEditor';
 import { useMapEditor } from '../components/poi-editor/useMapEditor';
 import { roomService } from '../services/roomService';
-import { multisetService } from '../services/multisetService';
+import { loadEditorMeshes } from '../services/vpsService';
 import { navigationService } from '../services/navigationService';
 import { resolveApiError } from '../services/api';
 import scenePinsData from '../data/scenePins.json';
@@ -39,10 +39,12 @@ export default function PoiEditorPage() {
   const qc = useQueryClient();
   const roomsQ = useQuery({ queryKey: ['rooms'], queryFn: roomService.getAll });
   const meshesQ = useQuery({
-    queryKey: ['multiset-meshes'],
-    queryFn: multisetService.getMapMeshes,
+    queryKey: ['editor-meshes'],
+    queryFn: loadEditorMeshes,
     staleTime: 30 * 60 * 1000,
+    retry: false,
   });
+  const meshes = meshesQ.data?.meshes;
 
   const [hiddenMaps, setHiddenMaps] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export default function PoiEditorPage() {
   // Misma consulta que el editor de navegación (react-query la comparte): nombres de las conexiones al bloquearlas
   const connectionsQ = useQuery({ queryKey: ['nav-connections'], queryFn: navigationService.getConnections });
   const edit = useMapEditor(() => viewerApiRef.current, tab === 'edit', connectionsQ.data ?? []);
-  const nav = useNavigationEditor(() => viewerApiRef.current, (meshesQ.data ?? []).map(m => m.name), setFocus, {
+  const nav = useNavigationEditor(() => viewerApiRef.current, (meshes ?? []).map(m => m.name), setFocus, {
     blocked: edit.forBuild.blocked,
     blockedConnections: edit.forBuild.blockedConnections,
     revision: edit.revision,
@@ -78,8 +80,8 @@ export default function PoiEditorPage() {
   const buildings = useMemo(() => [...new Set(rooms.map(r => r.category))].sort(), [rooms]);
 
   const visibleMeshes = useMemo(
-    () => (meshesQ.data ?? []).filter(m => !hiddenMaps.has(m.name)),
-    [meshesQ.data, hiddenMaps],
+    () => (meshes ?? []).filter(m => !hiddenMaps.has(m.name)),
+    [meshes, hiddenMaps],
   );
 
   const markers = useMemo<ViewerMarker[]>(() => {
@@ -176,7 +178,7 @@ export default function PoiEditorPage() {
       {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
       {meshesQ.isError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          No se pudieron obtener los modelos de MultiSet. Verifica MULTISET_CLIENT_ID / MULTISET_CLIENT_SECRET en el backend.
+          {meshesQ.error instanceof Error ? meshesQ.error.message : 'No se pudieron obtener los modelos 3D.'}
         </Alert>
       )}
 
@@ -274,8 +276,14 @@ export default function PoiEditorPage() {
         {/* ── Visor 3D ─────────────────────────────────────────────── */}
         <Paper sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           <Stack direction="row" spacing={2} sx={{ p: 1.5, alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
-            <Stack direction="row" spacing={1}>
-              {(meshesQ.data ?? []).map(m => (
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+              {meshesQ.data && (
+                <Chip
+                  size="small" variant="outlined"
+                  label={`VPS propio · ${meshesQ.data.spaceId}`}
+                />
+              )}
+              {(meshes ?? []).map(m => (
                 <Chip
                   key={m.name} label={m.name} size="small"
                   color={hiddenMaps.has(m.name) ? 'default' : 'primary'}
@@ -308,7 +316,7 @@ export default function PoiEditorPage() {
             <Box sx={{ px: 1.5, pb: 1 }}>
               <Typography variant="caption" color="text.secondary">
                 {meshesQ.isLoading
-                  ? 'Consultando MultiSet…'
+                  ? 'Consultando los modelos 3D…'
                   : `Descargando ${loading.map(([n, p]) => `${n} ${p}%`).join(' · ')} (se guarda en caché del navegador)`}
               </Typography>
               <LinearProgress

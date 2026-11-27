@@ -110,7 +110,7 @@ interface MapViewerProps {
   onEditMismatch?: (keys: string[]) => void;
 }
 
-const CACHE_NAME = 'ucomap-multiset-meshes';
+const CACHE_NAME = 'ucomap-scan-meshes';
 const NO_CLIP = 1e6;
 // Normal más horizontal que esto = pared: el clic no está sobre el piso
 const WALL_NORMAL_Y = 0.5;
@@ -177,6 +177,14 @@ async function fetchMesh(url: string, onPct: (pct: number) => void): Promise<Arr
   return buffer.buffer;
 }
 
+const meshFileKey = (url: string) => url.split('?')[0];
+
+function placeMesh(obj: THREE.Object3D, mesh: MapMesh) {
+  const { position: p, rotation: r } = mesh;
+  obj.position.set(p.x, p.y, p.z);
+  obj.quaternion.set(r.qx, r.qy, r.qz, r.qw);
+}
+
 class ViewerEngine {
   readonly renderer: THREE.WebGLRenderer;
   readonly labels: CSS2DRenderer;
@@ -196,7 +204,7 @@ class ViewerEngine {
   readonly draco: DRACOLoader;
   readonly loaded = new Map<string, THREE.Object3D>();
   readonly pending = new Set<string>();
-  wanted = new Set<string>();
+  wanted = new Map<string, MapMesh>();
   props: MapViewerProps;
   framed = false;
   private readonly raycaster = new THREE.Raycaster();
@@ -341,9 +349,10 @@ class ViewerEngine {
   }
 
   setMeshes(meshes: MapMesh[]) {
-    this.wanted = new Set(meshes.map(m => m.name));
+    this.wanted = new Map(meshes.map(m => [m.name, m]));
     for (const [name, obj] of this.loaded) {
-      if (!this.wanted.has(name)) {
+      const want = this.wanted.get(name);
+      if (!want || obj.userData.meshFile !== meshFileKey(want.url)) {
         this.model.unregister(name);
         this.meshRoot.remove(obj);
         this.disposeObject(obj);
@@ -351,7 +360,10 @@ class ViewerEngine {
       }
     }
     for (const mesh of meshes) {
-      if (!this.loaded.has(mesh.name) && !this.pending.has(mesh.name)) void this.loadMesh(mesh);
+      const obj = this.loaded.get(mesh.name);
+      // Misma malla con otra pose (vista previa de la alineación): se mueve sin volver a cargarla
+      if (obj) placeMesh(obj, mesh);
+      else if (!this.pending.has(mesh.name)) void this.loadMesh(mesh);
     }
     this.emitBounds();
   }
@@ -362,12 +374,11 @@ class ViewerEngine {
     try {
       const buffer = await fetchMesh(mesh.url, pct => this.props.onProgress(mesh.name, pct));
       const gltf = await this.loader.parseAsync(buffer, '');
-      if (!this.wanted.has(mesh.name)) { this.disposeObject(gltf.scene); return; }
+      const latest = this.wanted.get(mesh.name);
+      if (!latest || meshFileKey(latest.url) !== meshFileKey(mesh.url)) { this.disposeObject(gltf.scene); return; }
 
-      // MultiSet usa mano izquierda: misma conversión que MultiSetModel en Mattercraft
-      const { position: p, rotation: r } = mesh;
-      gltf.scene.position.set(-p.x, p.y, p.z);
-      gltf.scene.quaternion.set(r.qx, -r.qy, -r.qz, r.qw);
+      placeMesh(gltf.scene, latest);
+      gltf.scene.userData.meshFile = meshFileKey(mesh.url);
       gltf.scene.traverse(o => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
@@ -387,6 +398,9 @@ class ViewerEngine {
     } finally {
       this.pending.delete(mesh.name);
       this.props.onProgress(mesh.name, null);
+      // Pidieron otro archivo para este mapa mientras cargaba: se carga el nuevo
+      const latest = this.wanted.get(mesh.name);
+      if (latest && !this.loaded.has(mesh.name) && meshFileKey(latest.url) !== meshFileKey(mesh.url)) void this.loadMesh(latest);
     }
   }
 
@@ -1050,7 +1064,7 @@ class ViewerEngine {
   }
 
   dispose() {
-    this.wanted = new Set();
+    this.wanted = new Map();
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener('pointerdown', this.handleDown);

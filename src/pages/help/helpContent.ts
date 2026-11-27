@@ -1,5 +1,5 @@
 // Contenido de la sección Ayuda del panel.
-// Sale del «Manual de usuario del panel UCO MAP» (nov. 2026) y de la documentación oficial de MultiSet.
+// Sale del «Manual de usuario del panel UCO MAP» (nov. 2026).
 // Si cambia el manual en Word, actualizar aquí también (y al revés).
 //
 // Marcas que se pueden usar dentro de cualquier texto:
@@ -51,8 +51,6 @@ export interface HelpTask {
   steps: { label: string; target: string }[];
 }
 
-const DEVELOPER_PORTAL = 'https://developer.multiset.ai';
-
 export const HELP_SOURCE = {
   title: 'Manual de usuario del panel UCO MAP',
   date: 'noviembre de 2026',
@@ -62,7 +60,7 @@ export const HELP_SOURCE = {
 export const HELP_TASKS: HelpTask[] = [
   {
     title: 'Agregar un salón',
-    description: 'Cuando su piso ya está escaneado y dentro del MapSet.',
+    description: 'Cuando su piso ya está escaneado y publicado en el VPS propio.',
     steps: [
       { label: 'Registrar el lugar', target: 'lugares-registrar' },
       { label: 'Marcar el destino en 3D', target: 'lugares-destino' },
@@ -74,7 +72,7 @@ export const HELP_TASKS: HelpTask[] = [
     description: 'Desde el escaneo con el teléfono hasta que la app guía con la cámara.',
     steps: [
       { label: 'Escanear', target: 'escanear' },
-      { label: 'Agregar al MapSet', target: 'mapset-nuevo' },
+      { label: 'Subir, alinear y publicar', target: 'vps' },
       { label: 'Regenerar la malla', target: 'navegacion' },
       { label: 'Edificio y entrada', target: 'edificios' },
       { label: 'Salones', target: 'lugares' },
@@ -130,10 +128,11 @@ export const HELP_SECTIONS: HelpSection[] = [
               ['[Dashboard](/)', 'Ver cuánta gente usa la app y cuántos recorridos llegan a su destino'],
               ['[Mapa](/map)', 'Dibujar caminos exteriores, ubicar destinos en 3D y preparar la navegación interior'],
               ['[Campus](/campus)', 'Crear y editar edificios y salones'],
+              ['[VPS propio](/vps)', 'Subir escaneos, alinearlos al campus, procesarlos y publicar el servicio propio que ubica la cámara'],
               ['[Eventos](/events)', 'Publicar eventos que la app muestra en su inicio'],
               ['[Actividad](/sessions)', 'Ver los teléfonos que han usado la app y cada recorrido'],
               ['[Usuarios](/users)', 'Crear o desactivar administradores'],
-              ['[Configuración](/settings)', 'Prender o apagar funciones de la app sin publicar una versión nueva, y vigilar el cupo de MultiSet'],
+              ['[Configuración](/settings)', 'Prender o apagar funciones de la app sin publicar una versión nueva'],
               ['Ayuda', 'Esta guía'],
             ],
           },
@@ -142,17 +141,17 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
 
-  // ─── Escanear con MultiSet ─────────────────────────────────────────────────
+  // ─── Escanear ──────────────────────────────────────────────────────────────
   {
     id: 'escanear',
-    title: 'Escanear un espacio con la app de MultiSet',
+    title: 'Escanear un espacio',
     summary: 'Cómo capturar un piso o un ala con el teléfono para que la app pueda guiar con la cámara.',
     icon: 'scan',
-    shortcuts: [{ label: 'Developer Portal de MultiSet', to: DEVELOPER_PORTAL }],
+    shortcuts: [{ label: 'Abrir VPS propio', to: '/vps' }],
     intro: [
       {
         kind: 'p',
-        text: 'Para que la app guíe con la cámara dentro de un edificio, ese espacio tiene que estar escaneado con la app de MultiSet. Cada escaneo se convierte en un «mapa» que luego se une al mapa general del campus, el [MapSet](#mapset).',
+        text: 'Para que la app guíe con la cámara dentro de un edificio, ese espacio tiene que estar escaneado en 3D. Cada escaneo se sube como un «mapa» del [VPS propio](#vps), que lo ubica en el espacio general del campus.',
       },
     ],
     topics: [
@@ -163,8 +162,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           {
             kind: 'list',
             items: [
-              'Usar un iPhone, iPad o Android compatible con realidad aumentada. Si el teléfono tiene LiDAR (iPhone Pro), el resultado sale más preciso.',
-              'Instalar la app MultiSet e iniciar sesión con la cuenta del proyecto.',
+              'Usar una app de escaneo 3D que exporte el modelo en .glb con textura y en metros. Si el teléfono tiene LiDAR (iPhone o iPad Pro), el resultado sale más preciso.',
               'Cargar el teléfono y apagar el bloqueo automático de pantalla.',
               'Escanear un piso o un ala por vez, en sesiones de unos 5 minutos.',
               'Ir en un horario con poca gente y con la luz normal del edificio.',
@@ -174,7 +172,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           {
             kind: 'note',
             tone: 'tip',
-            text: 'Antes de escanear conviene leer las [recomendaciones de MultiSet](#recomendaciones-multiset) para planear el recorrido.',
+            text: 'Antes de escanear conviene leer las [recomendaciones](#recomendaciones) para planear el recorrido.',
           },
         ],
       },
@@ -185,8 +183,8 @@ export const HELP_SECTIONS: HelpSection[] = [
           {
             kind: 'steps',
             items: [
-              'En la app, crear un mapa nuevo, escribir el nombre e iniciar el escaneo.',
-              'Llevar el teléfono en horizontal, a 1–5 m de paredes y objetos.',
+              'En la app de escaneo, crear un escaneo nuevo e iniciarlo.',
+              'Mantener el teléfono a 1–5 m de paredes y objetos.',
               'Caminar despacio y sin parar. Si la malla sale con huecos, bajar el ritmo y volver a apuntar a lo que ya se escaneó.',
               'Apuntar a cada zona desde varios ángulos.',
               'Hacer una pasada mirando hacia el techo y otra mirando al piso. El piso es lo que más importa: de ahí sale el camino que dibuja la app. Un piso con huecos obliga a ponerle [parches](#navegacion-parches) después.',
@@ -194,134 +192,39 @@ export const HELP_SECTIONS: HelpSection[] = [
               'En escaleras, escanear todos los escalones, el descanso y la llegada en los dos pisos.',
               'Frente a cada ascensor, escanear bien el piso de la puerta en cada nivel. El interior de la cabina no hace falta.',
               'Evitar que en el centro de la imagen queden espejos, vidrios, paredes lisas o gente caminando. Las carteleras, columnas y muebles fijos ayudan.',
-              'Terminar el escaneo y subirlo.',
+              'Terminar el escaneo y exportarlo en .glb con textura.',
             ],
           },
           {
             kind: 'note',
             tone: 'info',
-            text: 'Si el mapa nuevo es parte de un edificio que ya está escaneado, debe compartir con él unos 5 a 10 m de recorrido, por ejemplo una puerta o una escalera. Eso facilita ubicarlo en el paso siguiente.',
+            text: 'Si el mapa nuevo es parte de un edificio que ya está escaneado, debe compartir con él unos 5 a 10 m de recorrido, por ejemplo una puerta o una escalera. Eso facilita alinearlo en el paso siguiente.',
           },
-          { kind: 'figure', file: 'multiset-app-nuevo-mapa', caption: 'App MultiSet: pantalla de nuevo mapa con el nombre asignado.' },
-          { kind: 'figure', file: 'multiset-app-escaneo', caption: 'App MultiSet durante el escaneo, con la malla del piso capturándose.' },
         ],
       },
       {
-        id: 'procesar',
-        title: 'Esperar a que se procese',
-        blocks: [
-          {
-            kind: 'p',
-            text: `Después de subirlo, el mapa aparece en el [Developer Portal de MultiSet](${DEVELOPER_PORTAL}), en la sección Maps, con uno de estos estados:`,
-          },
-          {
-            kind: 'table',
-            head: ['Estado', 'Qué significa', 'Qué hacer'],
-            rows: [
-              ['Uploading', 'Se está subiendo desde el teléfono', 'Esperar con buena conexión'],
-              ['Pending', 'MultiSet lo está procesando', 'Esperar unos minutos'],
-              ['Active', 'Listo para usar', 'Seguir con [Agregar el mapa al MapSet](#mapset)'],
-              ['Failed', 'Falló el procesamiento', 'Volver a escanear'],
-            ],
-          },
-          { kind: 'figure', file: 'multiset-portal-maps', caption: 'Developer Portal, sección Maps, con el mapa recién subido y su estado.' },
-        ],
-      },
-    ],
-  },
-
-  // ─── MapSet ────────────────────────────────────────────────────────────────
-  {
-    id: 'mapset',
-    title: 'Agregar el mapa al MapSet',
-    summary: 'Unir cada escaneo al mapa general del campus para que aparezca en el panel y en la app.',
-    icon: 'mapset',
-    shortcuts: [
-      { label: 'Developer Portal de MultiSet', to: DEVELOPER_PORTAL },
-      { label: 'Abrir Interior AR', to: '/map?tab=ar' },
-    ],
-    intro: [
-      {
-        kind: 'p',
-        text: 'El MapSet es el mapa general del campus: une todos los escaneos en un mismo espacio. Un mapa que no esté dentro del MapSet no aparece en el panel ni sirve para la app.',
-      },
-    ],
-    topics: [
-      {
-        id: 'nuevo',
-        title: 'Mapa nuevo',
+        id: 'subir',
+        title: 'Subirlo al VPS propio',
         blocks: [
           {
             kind: 'steps',
             items: [
-              'En el Developer Portal, entrar al MapSet del campus y pulsar Add map.',
-              'Elegir el tipo de alineación. Recomendamos Manual alignment: la automática suele fallar y tarda más.',
-              'Pulsar Select map, elegir el mapa recién escaneado y pulsar Continue.',
-              'Acomodar el mapa en su sitio. Si es parte de un edificio que ya está en el MapSet, se pone junto a esa zona para que pasillos y escaleras continúen. Si es un edificio nuevo, se deja aparte, sin que se encime con ningún otro mapa.',
-              'Revisar cómo quedó con View maps y, si está bien, pulsar Save changes.',
-              'Abrir el panel en [Mapa → Interior AR](/map?tab=ar). El mapa nuevo aparece solo, como un botón más con su nombre en la barra de arriba del visor 3D. Cada botón muestra u oculta ese mapa.',
+              'En [VPS propio → Mapas](/vps), crear el mapa con «Nuevo mapa» o elegir el que se volvió a escanear.',
+              'Pulsar «Subir escaneo» y elegir el .glb con textura. Ver [Mapas y escaneos](#vps-mapas).',
+              'Seguir con [Alinear](#vps-alinear), [Procesar](#vps-procesar) y [Publicar](#vps-publicar).',
             ],
-          },
-          { kind: 'figure', file: 'multiset-mapset-add-map', caption: 'Paso 1: MapSet del campus con el botón Add map.' },
-          { kind: 'figure', file: 'multiset-tipo-alineacion', caption: 'Paso 2: ventana para elegir Auto alignment o Manual alignment.' },
-          { kind: 'figure', file: 'multiset-select-map', caption: 'Paso 3: Select map con el mapa nuevo elegido y el botón Continue.' },
-          { kind: 'figure', file: 'multiset-alineacion-manual', caption: 'Paso 4: alineación manual, con el mapa junto a su edificio o aparte si es un edificio nuevo.' },
-          { kind: 'figure', file: 'multiset-view-maps', caption: 'Paso 5: View maps con el resultado y el botón Save changes.' },
-        ],
-      },
-      {
-        id: 'version',
-        title: 'Nueva versión de un mapa',
-        blocks: [
-          {
-            kind: 'p',
-            text: 'Cuando se vuelve a escanear una zona que ya está en el MapSet, no se agrega como mapa nuevo sino como versión:',
-          },
-          {
-            kind: 'steps',
-            items: [
-              'Entrar al MapSet y seleccionar el mapa que se va a actualizar.',
-              'En la parte inferior, pulsar Create map version.',
-              'Seguir los mismos pasos 2 a 5 de [Mapa nuevo](#mapset-nuevo).',
-              'Esperar a que la nueva versión termine de subir y procesarse.',
-            ],
-          },
-          { kind: 'figure', file: 'multiset-create-map-version', caption: 'Mapa seleccionado dentro del MapSet, con el botón Create map version.' },
-        ],
-      },
-      {
-        id: 'despues',
-        title: 'Después de agregar o cambiar un mapa',
-        blocks: [
-          {
-            kind: 'p',
-            text: 'La app no puede trazar rutas sobre el mapa nuevo hasta que se rehaga la malla de navegación. Hay que seguir [Navegación interior](#navegacion): Regenerar, revisar parches, escaleras y ascensores de la zona, y Publicar.',
-          },
-          {
-            kind: 'p',
-            text: 'Si el mapa nuevo quedó corrido respecto a los demás, el arreglo se hace en el Developer Portal, no en el panel: volver a alinearlo a mano y guardar.',
-          },
-          {
-            kind: 'note',
-            tone: 'warning',
-            text: 'Nunca crear un MapSet nuevo desde cero. Todos los destinos y ajustes guardados en el panel quedarían descuadrados.',
           },
         ],
       },
     ],
   },
 
-  // ─── Recomendaciones MultiSet ──────────────────────────────────────────────
+  // ─── Recomendaciones ───────────────────────────────────────────────────────
   {
-    id: 'recomendaciones-multiset',
-    title: 'Recomendaciones de MultiSet para mapear',
-    summary: 'Lo que pide MultiSet en su documentación y lo que nos ha funcionado escaneando el campus.',
+    id: 'recomendaciones',
+    title: 'Recomendaciones para escanear',
+    summary: 'Lo que nos ha funcionado escaneando el campus.',
     icon: 'tips',
-    shortcuts: [
-      { label: 'Guía de captura (MultiSet)', to: 'https://docs.multiset.ai/basics/maps/mapping-instruction' },
-      { label: 'Planear el mapeo (MultiSet)', to: 'https://docs.multiset.ai/basics/maps/mapping-planning' },
-      { label: 'Versiones de mapa (MultiSet)', to: 'https://docs.multiset.ai/basics/map-versioning' },
-    ],
     topics: [
       {
         id: 'planear',
@@ -330,7 +233,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           {
             kind: 'list',
             items: [
-              'MultiSet recomienda su app para espacios de 10 a 500 m². Por eso en el campus va un piso o un ala por mapa, no un edificio entero.',
+              'Un piso o un ala por mapa, no un edificio entero.',
               'Hacer un recorrido en círculo por el borde del espacio y terminar cerca de donde se empezó, para no escanear dos veces la misma zona.',
               'No hace falta escanear rincones a los que nadie llega, como detrás o debajo de muebles.',
               'Un salón vacío da muy poca información para que la app se ubique. Si se puede, escanearlo con sus mesas, tablero y carteleras en su lugar.',
@@ -350,9 +253,9 @@ export const HELP_SECTIONS: HelpSection[] = [
               ['Distancia', 'Entre 1 y 5 m de la superficie. En espacios pequeños se puede bajar hasta unos 0,5 m'],
               ['Ángulos', 'Variar ángulos y distancias. Repetir el mismo punto de vista no mejora el mapa'],
               ['Velocidad', 'Lento y continuo, sin paradas ni giros bruscos'],
-              ['Orientación', 'Horizontal. Inclinar hacia arriba o abajo para el techo y el piso, en pasadas aparte si hace falta'],
+              ['Orientación', 'Inclinar hacia arriba o abajo para el techo y el piso, en pasadas aparte si hace falta'],
               ['Pasillos', 'Siempre en los dos sentidos. Desde un solo extremo todo se ve igual y cuesta ubicarse'],
-              ['Traslape entre sesiones', 'Cada sesión debe compartir zonas visibles con la anterior, sobre todo en puertas y transiciones. Sin eso los mapas no se pueden unir'],
+              ['Traslape entre sesiones', 'Cada sesión debe compartir zonas visibles con la anterior, sobre todo en puertas y transiciones. Sin eso los mapas no se pueden alinear'],
               ['Superficies a evitar', 'Espejos, vidrio, paredes lisas y cosas en movimiento, al menos fuera del centro de la imagen'],
             ],
           },
@@ -362,30 +265,25 @@ export const HELP_SECTIONS: HelpSection[] = [
           },
           {
             kind: 'p',
-            text: 'MultiSet filtra solo buena parte de lo que se mueve, pero el mapa queda más estable si se escanea con poca gente.',
+            text: 'Lo que se mueve durante la captura queda como ruido en el modelo: el mapa sale más limpio si se escanea con poca gente.',
           },
         ],
       },
       {
-        id: 'mapset-o-version',
-        title: '¿Mapa nuevo o versión?',
+        id: 'mapa-o-escaneo',
+        title: '¿Mapa nuevo o escaneo nuevo?',
         blocks: [
           {
             kind: 'table',
             head: ['Situación', 'Qué usar'],
             rows: [
-              ['Se escaneó una zona que todavía no estaba cubierta', '[Add map en el MapSet](#mapset-nuevo)'],
-              ['Se volvió a escanear una zona que ya está en el MapSet (cambiaron muebles, salió mal, remodelación)', '[Create map version sobre ese mapa](#mapset-version)'],
+              ['Se escaneó una zona que todavía no estaba cubierta', '«Nuevo mapa» en [Mapas y escaneos](#vps-mapas)'],
+              ['Se volvió a escanear una zona que ya tiene mapa (cambiaron muebles, salió mal, remodelación)', '«Subir escaneo» sobre ese mismo mapa y [alinearlo](#vps-alinear) encima del anterior'],
             ],
           },
           {
             kind: 'p',
-            text: 'Con una versión, MultiSet calcula solo dónde queda el escaneo nuevo respecto al anterior, así que los destinos guardados en el panel siguen en su sitio.',
-          },
-          {
-            kind: 'note',
-            tone: 'warning',
-            text: 'No mezclar generaciones: los mapas Gen 1 de la cuenta anterior no se pueden unir con los Gen 2 del MapSet actual. Y nunca crear un MapSet nuevo desde cero.',
+            text: 'Así el mapa conserva su nombre, y los destinos guardados en el panel siguen en su sitio si el escaneo nuevo queda alineado sobre el anterior.',
           },
         ],
       },
@@ -395,22 +293,109 @@ export const HELP_SECTIONS: HelpSection[] = [
         blocks: [
           {
             kind: 'p',
-            text: 'La app de MultiSet solo sirve para escanear interiores; para exteriores MultiSet pide escáneres profesionales. En UCO MAP los recorridos de afuera van por GPS sobre los caminos del [mapa exterior](#mapa-exterior), así que no hace falta escanearlos.',
+            text: 'Solo se escanean interiores. En UCO MAP los recorridos de afuera van por GPS sobre los caminos del [mapa exterior](#mapa-exterior), así que no hace falta escanearlos.',
+          },
+        ],
+      },
+    ],
+  },
+
+  // ─── VPS propio ────────────────────────────────────────────────────────────
+  {
+    id: 'vps',
+    title: 'VPS propio',
+    summary: 'Pasar un escaneo al servicio propio que ubica la cámara, alinearlo al campus, procesarlo y publicarlo.',
+    icon: 'mapset',
+    shortcuts: [{ label: 'VPS propio', to: '/vps' }],
+    intro: [
+      {
+        kind: 'p',
+        text: 'El VPS propio es el servicio del proyecto que ubica la cámara del teléfono en el campus. Todos los mapas comparten el espacio del campus: los destinos 3D, la malla de navegación, los parches, las conexiones y los ascensores se guardan en ese mismo espacio.',
+      },
+      {
+        kind: 'note',
+        tone: 'warning',
+        text: 'El servidor del VPS se instala aparte (Manual técnico). Si la página dice que no se pudo conectar, revisar `VPS_BASE_URL`, `VPS_TOKEN_KID` y `VPS_TOKEN_SECRET` en el backend.',
+      },
+    ],
+    topics: [
+      {
+        id: 'mapas',
+        title: 'Mapas y escaneos',
+        blocks: [
+          {
+            kind: 'list',
+            items: [
+              'Cada mapa es un piso o un ala con un código.',
+              'Subir escaneo: el modelo .glb con textura que exporta la app de escaneo y, si existe, el .glb sin textura. Un escaneo nuevo no cambia nada hasta que entra en una revisión.',
+              'Renombrar un mapa o cambiarle el escaneo hace que dejen de aplicarse las limpiezas del modelo 3D hechas en el editor AR, porque se guardan con el nombre y la forma de la malla.',
+            ],
           },
         ],
       },
       {
-        id: 'cupo',
-        title: 'Cuidar el cupo de llamadas',
+        id: 'alinear',
+        title: 'Alinear un escaneo al campus',
         blocks: [
           {
-            kind: 'p',
-            text: 'Cada vez que la app se ubica con la cámara gasta llamadas del plan de MultiSet, y las pruebas en el campus también cuentan. El uso estimado está en [Configuración](/settings); si llega al umbral, la guía con cámara se apaga sola.',
+            kind: 'steps',
+            items: [
+              'En «Alineación», elegir el mapa y su escaneo. El visor muestra el resto del campus como referencia.',
+              'Acercarlo con X, Y, Z y Giro, o con «Alinear por puntos»: marcar un punto en el escaneo y el mismo punto en el campus, al menos 2 pares (3 en 6 GdL).',
+              'Cuando ya esté cerca, afinar con «Refinar con ICP».',
+              'Pulsar «Crear revisión» con una nota de lo que cambió.',
+            ],
           },
           {
             kind: 'note',
             tone: 'tip',
-            text: `Para que la estimación no se desfase, copiar de vez en cuando el uso real que muestra el [Developer Portal](${DEVELOPER_PORTAL}) en Account al campo «Uso actual según el portal». Detalle en [Cupo de MultiSet](#gestion-cupo).`,
+            text: 'Un mapa que ya está en la revisión solo se mueve si su escaneo quedó corrido: moverlo cambia dónde ve la app ese piso respecto a los destinos ya guardados.',
+          },
+        ],
+      },
+      {
+        id: 'procesar',
+        title: 'Procesar y evaluar',
+        blocks: [
+          {
+            kind: 'p',
+            text: 'En «Procesamiento», «Procesar revisión» arma el paquete con el que el servidor ubica las fotos. Tarda varios minutos por mapa y lo hace el worker del servidor.',
+          },
+          {
+            kind: 'p',
+            text: 'Al terminar se evalúa con vistas del propio escaneo. El mínimo sugerido para publicar es 85 % de vistas ubicadas a menos de 0,5 m y 5°, sin falsos positivos.',
+          },
+        ],
+      },
+      {
+        id: 'publicar',
+        title: 'Publicar y volver atrás',
+        blocks: [
+          {
+            kind: 'steps',
+            items: [
+              'En «Publicación», elegir el build listo y pulsar Publicar. La app lo usa desde la próxima localización.',
+              'Probarlo con fotos del campus en «Probar» y luego con la app.',
+            ],
+          },
+          {
+            kind: 'note',
+            tone: 'info',
+            text: 'Si algo sale mal, «Volver a este build» en la tarjeta Anterior restaura el build previo sin publicar una versión de la app.',
+          },
+        ],
+      },
+      {
+        id: 'despues',
+        title: 'Después de agregar o cambiar un mapa',
+        blocks: [
+          {
+            kind: 'p',
+            text: 'La app no puede trazar rutas sobre el mapa nuevo hasta que se rehaga la malla de navegación. Hay que seguir [Navegación interior](#navegacion): Regenerar, revisar parches, escaleras y ascensores de la zona, y Publicar.',
+          },
+          {
+            kind: 'p',
+            text: 'Si el mapa nuevo quedó corrido respecto a los demás, se corrige en [Alineación](#vps-alinear) con una revisión nueva, que luego se procesa y se publica.',
           },
         ],
       },
@@ -507,7 +492,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         kind: 'note',
         tone: 'info',
-        text: 'Antes de empezar, revisar que el [edificio](#edificios) exista y que la zona esté [escaneada](#escanear) y [en el MapSet](#mapset).',
+        text: 'Antes de empezar, revisar que el [edificio](#edificios) exista y que la zona esté [escaneada](#escanear) y [publicada en el VPS propio](#vps-publicar).',
       },
     ],
     topics: [
@@ -605,7 +590,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         id: 'orden',
         title: 'Cuándo y en qué orden',
         blocks: [
-          { kind: 'p', text: 'Hay que pasar por aquí cada vez que se agrega o se actualiza un mapa en MultiSet. El orden recomendado es:' },
+          { kind: 'p', text: 'Hay que pasar por aquí cada vez que se agrega o se actualiza un mapa en el VPS propio. El orden recomendado es:' },
           {
             kind: 'steps',
             items: [
@@ -747,7 +732,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           {
             kind: 'note',
             tone: 'info',
-            text: 'Ctrl+Z deshace y Ctrl+Shift+Z rehace. Lo quitado se puede ver y restaurar desde la lista «Limpiezas del modelo». Si una limpieza dice que no se aplica porque el mapa cambió, es que el mapa se actualizó en MultiSet: restaurarla y volver a limpiar.',
+            text: 'Ctrl+Z deshace y Ctrl+Shift+Z rehace. Lo quitado se puede ver y restaurar desde la lista «Limpiezas del modelo». Si una limpieza dice que no se aplica porque el mapa cambió, es que el mapa se actualizó en el VPS propio: restaurarla y volver a limpiar.',
           },
         ],
       },
@@ -837,7 +822,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   {
     id: 'gestion',
     title: 'Eventos, usuarios y configuración',
-    summary: 'Avisos en la app, cuentas de administrador, parámetros y cupo de MultiSet.',
+    summary: 'Avisos en la app, cuentas de administrador y parámetros.',
     icon: 'event',
     shortcuts: [
       { label: 'Abrir Eventos', to: '/events' },
@@ -910,30 +895,6 @@ export const HELP_SECTIONS: HelpSection[] = [
           },
         ],
       },
-      {
-        id: 'cupo',
-        title: 'Cupo de MultiSet',
-        blocks: [
-          {
-            kind: 'p',
-            text: 'Arriba en [Configuración](/settings) está el cupo estimado de llamadas a MultiSet, que son las que se gastan cuando la app se ubica con la cámara. Se calcula con lo que informa la app en cada recorrido y lo que hace el servidor; consultarlo no gasta llamadas.',
-          },
-          {
-            kind: 'steps',
-            items: [
-              'Elegir el plan contratado: Free (1.000 llamadas en total), Lite (10.000 al mes), Plus (50.000 al mes) o Personalizado.',
-              'En los planes mensuales, revisar el día de renovación del ciclo.',
-              'Poner en «Apagar la guía al llegar a (%)» el porcentaje en el que se quiere cortar.',
-              'Opcional: copiar en «Uso actual según el portal» el número que muestra el Developer Portal en Account. La estimación sigue sumando desde ahí.',
-            ],
-          },
-          {
-            kind: 'note',
-            tone: 'info',
-            text: 'Al llegar al umbral, la guía con cámara se apaga sola (como poner `enableIndoorARNavigation` en false) y el Dashboard muestra un aviso. Se enciende otra vez al empezar el nuevo ciclo o al ampliar el plan, o a mano desde los parámetros.',
-          },
-        ],
-      },
     ],
   },
 
@@ -997,9 +958,9 @@ export const HELP_SECTIONS: HelpSection[] = [
             kind: 'table',
             head: ['Qué pasa', 'Por qué suele pasar', 'Qué hacer'],
             rows: [
-              ['Interior AR dice que no se pudieron obtener los modelos de MultiSet', 'La cuenta de MultiSet no tiene créditos o hay un problema de configuración', 'Avisar al equipo técnico (Manual técnico, sección de problemas)'],
-              ['El mapa nuevo no aparece en Interior AR', 'Todavía se está procesando o no se agregó al MapSet', 'Esperar a que esté en Active y [agregarlo](#mapset-nuevo)'],
-              ['El mapa nuevo aparece corrido respecto a los demás', 'Quedó mal alineado en el MapSet', 'Corregir la alineación manual en el Developer Portal y guardar'],
+              ['Interior AR dice que no se pudieron obtener los modelos 3D', 'El VPS propio no responde o no tiene un build publicado', 'Revisar la página [VPS propio](/vps); si no conecta, avisar al equipo técnico (Manual técnico, sección de problemas)'],
+              ['El mapa nuevo no aparece en Interior AR', 'Todavía no está en el build publicado', 'Procesarlo y [publicarlo](#vps-publicar)'],
+              ['El mapa nuevo aparece corrido respecto a los demás', 'Quedó mal alineado', 'Corregirlo en [Alineación](#vps-alinear), procesar y publicar'],
               ['La flecha atraviesa paredes o no encuentra ruta', 'La malla no está al día o tiene zonas sueltas', 'Regenerar, revisar con «Ver», poner parches o conexiones y publicar ([Navegación interior](#navegacion))'],
               ['La ruta pasa por donde no debe (un salón cerrado, un mueble)', 'La malla incluye una zona que no se debe usar', 'Bloquearla con [Corregir](#navegacion-corregir), regenerar y publicar'],
               ['La ruta interior no sube de piso', 'Falta la escalera o el ascensor de esa zona', 'Crearlos en la pestaña Navegación ([parches](#navegacion-parches), [conexiones](#navegacion-conexiones), [ascensores](#navegacion-ascensores))'],
@@ -1009,7 +970,6 @@ export const HELP_SECTIONS: HelpSection[] = [
               ['La ruta exterior pasa por dentro de un edificio', 'Un camino cruza el edificio en el mapa', 'Revisar «Caminos y edificios» y mover puntos'],
               ['Un edificio dice «Sin ubicar»', 'No tiene ubicación en el mapa', 'Editarlo y ponerle latitud y longitud'],
               ['Error de duplicado al crear un salón o edificio', 'El ID o la categoría ya existen', 'Usar otro ID; revisar edificios inactivos'],
-              ['La guía con cámara se apagó sola', 'El uso de MultiSet llegó al umbral del cupo', 'Revisar el [cupo](#gestion-cupo); se enciende con el nuevo ciclo o a mano'],
               ['El panel saca al usuario', 'La sesión vence después de un día', 'Volver a entrar'],
               ['No llega el correo para recuperar la contraseña', 'Problema con la cuenta de correo del sistema', 'Avisar al equipo técnico'],
               ['Un teléfono no ofrece la cámara', 'El teléfono no es compatible o la función está apagada en Configuración', 'Abrir la app con `?arDevice=report` al final de la dirección para ver el motivo; revisar los [parámetros](#gestion-configuracion)'],

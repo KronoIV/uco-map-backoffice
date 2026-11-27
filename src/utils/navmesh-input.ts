@@ -1,7 +1,7 @@
 /**
  * Geometría exacta que entra a recast al generar el navmesh (escaneo con los parches ya aplicados), con las
  * conexiones y los ajustes del admin. El admin la exporta para que uco-map-app (npm run eval:experiment) compare
- * ajustes de recast sin red ni MultiSet. Copia idéntica en uco-map-app/test/eval/experiment/navmesh-input.ts.
+ * ajustes de recast sin red. Copia idéntica en uco-map-app/test/eval/experiment/navmesh-input.ts.
  *
  * Formato: u32 little-endian con la longitud de la cabecera · cabecera JSON UTF-8 rellena con espacios hasta un
  * múltiplo de 4 · posiciones Float32 (x, y, z) · índices Uint32 (3 por triángulo), ambos en el orden de bytes de la

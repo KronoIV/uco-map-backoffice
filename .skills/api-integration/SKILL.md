@@ -37,7 +37,7 @@ const api = axios.create({
 | `userService.ts` | `/api/users` (CRUD) |
 | `navigationService.ts` | `/api/navigation/{connections,patches,elevators}`, `GET/PUT /api/navigation/navmesh` (binario), `/navmesh/info` |
 | `mapEditService.ts` | `/api/navigation/scan-edits`, `/api/navigation/blocks` |
-| `multisetService.ts` | `GET /api/multiset/map-meshes`, `GET/PUT /api/multiset/usage` |
+| `vpsService.ts` | `POST /api/vps/admin-token` (token de alcance `admin`, 30 min, cacheado) y luego **directo al VPS propio** (`baseUrl` de la respuesta): `/v1/admin/**` (map sets, mapas, escaneos, subidas por partes, alineación, revisiones, builds, publicación, trabajos, registros) y `POST /v1/localize`. Errores como `VpsApiError` (503 del backend → `not_configured`). `loadEditorMeshes()` da las mallas del editor desde el build publicado |
 | `deviceSessionService.ts` | `/api/sessions` (paginado), `/api/sessions/stats` |
 | `tripService.ts` | `/api/trips` (paginado), `/api/trips/summary`, `/api/trips/export` (CSV) |
 | `analyticsService.ts` | `/api/analytics`, `/api/analytics/trips` |
@@ -48,8 +48,8 @@ para poder enviar la cabecera `Authorization`.
 ## Tipos
 
 `src/types/index.ts` replica la forma JSON del backend (`Building`, `Room`, `GraphNode`, `GraphEdge`, `CampusEvent`,
-`AppSetting`, `NavConnection`, `NavPatch`, `MultiSetUsage`, `PageResponse<T>`...); `src/types/analytics.ts` la de
-`/api/analytics`. **Si el backend cambia un DTO, actualiza estos tipos** (TypeScript no lo detecta solo: el contrato
+`AppSetting`, `NavConnection`, `NavPatch`, `MapMesh`, `PageResponse<T>`...); `src/types/analytics.ts` la de
+`/api/analytics` y `src/types/vps.ts` la del VPS propio (`/v1/**`). **Si el backend cambia un DTO, actualiza estos tipos** (TypeScript no lo detecta solo: el contrato
 no se genera automáticamente).
 
 ## Cómo consumir un endpoint nuevo

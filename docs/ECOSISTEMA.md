@@ -1,7 +1,7 @@
 # UCO MAP: arquitectura del ecosistema
 
-> Documento compartido: existe **idéntico** en `docs/ECOSISTEMA.md` de los tres repositorios (backend, admin y app).
-> Si lo cambias, cópialo a los otros dos.
+> Documento compartido: existe **idéntico** en `docs/ECOSISTEMA.md` de los cuatro repositorios (backend, admin, app y
+> vps-server). Si lo cambias, cópialo a los otros tres.
 >
 > Todo lo que aparece aquí se comprobó en el código (noviembre de 2026). Lo que no se pudo verificar desde los
 > repositorios está marcado con **(por confirmar)** y debe preguntarse al responsable del proyecto.
@@ -12,8 +12,8 @@ UCO MAP guía a estudiantes y visitantes por el campus de la Universidad Católi
 
 - **Exterior:** un mapa con GPS calcula la ruta por los senderos del campus hasta la puerta del edificio.
 - **Interior:** en teléfonos compatibles, una guía con cámara (realidad aumentada) muestra el camino dentro del
-  edificio hasta el salón o punto de interés. La posición se obtiene con un VPS (*Visual Positioning System*)
-  de MultiSet.
+  edificio hasta el salón o punto de interés. La posición se obtiene con el VPS (*Visual Positioning System*) propio
+  del proyecto (`vps-server`).
 - **Administración:** un panel web donde el equipo mantiene edificios, salones, el grafo de caminos, los puntos AR,
   la malla de navegación interior (*navmesh*), los eventos del campus y consulta la analítica de uso.
 
@@ -24,10 +24,12 @@ UCO MAP guía a estudiantes y visitantes por el campus de la Universidad Católi
 | **Backend** (API) | `KronoIV/ms-ucoMap-backend` (público) | Java 21, Spring Boot 3.5.14, MongoDB | Railway: `https://ucomap-backend.up.railway.app` (URL tomada del `.env` de admin y app). La forma exacta de despliegue en Railway **(por confirmar)**; el repo trae `Dockerfile`. |
 | **Admin** (panel) | `KronoIV/uco-map-backoffice` (público) | React 19, Vite 8, TypeScript 6, MUI 7 | Netlify **(por confirmar)**: `public/_redirects` es de Netlify y el backend arma el enlace de restablecer contraseña con `https://uco-map.netlify.app`. |
 | **App** (estudiantes) | `KronoIV/uco-map-app` (privado) | Vite 8, TypeScript 5.6 sin framework, three.js 0.150.1, WebXR, recast-navigation | **(por confirmar)**: el README antiguo hablaba de Netlify y de un `netlify.toml` que no existe en el repo. |
+| **VPS propio** | `vps-server` (repo git local, sin remoto todavía; propuesto `KronoIV/uco-map-vps`, privado) | Python 3.12 (uv), FastAPI, torch, MongoDB propia (`ucomap_vps`) | **(por definir)**: servidor x86_64, idealmente con GPU NVIDIA, con `docker compose` + Caddy (ver su README). |
 
-Los tres repos son independientes (no hay monorepo). En la máquina del equipo anterior estaban como carpetas
-hermanas: `backend/`, `uco-map-admin/` y `uco-map-app/`. **Conserva esa disposición**: los scripts
-`check:routing` y `check:brand` del admin comparan archivos con `../uco-map-app`.
+Los cuatro repos son independientes (no hay monorepo). En la máquina del equipo anterior estaban como carpetas
+hermanas: `backend/`, `uco-map-admin/`, `uco-map-app/` y `vps-server/`. **Conserva esa disposición**: los scripts
+`check:routing` y `check:brand` del admin comparan archivos con `../uco-map-app`, y la prueba dorada del VPS usa
+three.js de `../uco-map-admin` o `../uco-map-app`.
 
 ## 3. Arquitectura general
 
@@ -46,10 +48,11 @@ flowchart LR
     subgraph Servidor
         API[Backend Spring Boot<br/>/api/**]
         DB[(MongoDB<br/>Atlas en producción)]
+        VPS[VPS propio<br/>vps-server]
+        VDB[(MongoDB<br/>ucomap_vps)]
     end
 
     subgraph Externos
-        MS[MultiSet<br/>API VPS + archivos]
         SMTP[Gmail SMTP]
         OSM[OpenStreetMap<br/>Overpass / API 0.6]
         TILES[Teselas de mapa<br/>OpenFreeMap / ArcGIS]
@@ -61,10 +64,10 @@ flowchart LR
     APP -- "endpoints públicos (sin login)" --> API
     PANEL -- "JWT Bearer (rol ADMIN)" --> API
     API --> DB
-    API -- "tokens, mallas 3D" --> MS
     API -- "correo de restablecer contraseña" --> SMTP
-    APP -- "localización VPS con token corto" --> MS
-    PANEL -- "descarga mallas GLB (URLs del backend)" --> MS
+    APP -- "localización con token corto del backend" --> VPS
+    PANEL -- "mapas, mallas GLB, builds y publicación (token admin del backend)" --> VPS
+    VPS --> VDB
     APP --> OSM
     PANEL --> OSM
     APP --> TILES
@@ -76,9 +79,10 @@ flowchart LR
 
 | Módulo | Es dueño de | No hace |
 |---|---|---|
-| **Backend** | Persistencia en MongoDB, reglas de negocio (grafo, edificios ⇄ nodos, eventos, viajes, analítica), autenticación JWT, rate limit, correo, intermediario de MultiSet (guarda el secreto y entrega tokens cortos), almacén del navmesh publicado. | No calcula rutas ni genera el navmesh. |
-| **Admin** | Edición de datos del campus, editor del grafo exterior (Leaflet/MapLibre), visor 3D de los escaneos (three.js), **generación del navmesh** en el navegador (recast-navigation en un Web Worker) y su publicación, eventos, usuarios, configuración y tableros de analítica. | No lo usan los estudiantes. |
+| **Backend** | Persistencia en MongoDB, reglas de negocio (grafo, edificios ⇄ nodos, eventos, viajes, analítica), autenticación JWT, rate limit, correo, tokens cortos del VPS propio, almacén del navmesh publicado. | No calcula rutas ni genera el navmesh. No llama al VPS propio: solo firma sus tokens. |
+| **Admin** | Edición de datos del campus, editor del grafo exterior (Leaflet/MapLibre), visor 3D de los escaneos (three.js), **generación del navmesh** en el navegador (recast-navigation en un Web Worker) y su publicación, eventos, usuarios, configuración, tableros de analítica y la página **VPS propio** (mapas, alineación, builds, publicación, pruebas). | No lo usan los estudiantes. |
 | **App** | Experiencia del estudiante: búsqueda de destinos, ruta exterior con GPS, transición exterior → interior, guía AR con motor propio (WebXR / cámara + VPS + navmesh), llegada, y envío de telemetría (sesiones y recorridos). | No escribe datos del campus; solo usa endpoints públicos. |
+| **VPS propio** | Escaneos y sus poses en el espacio del map set, revisiones, builds (vistas sintéticas + features), evaluación, publicación con rollback y localización de fotos (`POST /v1/localize`). | No guarda datos del campus ni emite tokens. Solo guarda fotos de usuarios con `VPS_DEBUG_CAPTURE` (pruebas, 3 días). |
 
 ## 5. Comunicación entre módulos
 
@@ -87,8 +91,8 @@ flowchart LR
 - Prefijo `/api`. JSON. Toda respuesta correcta va envuelta: `{ "data": ..., "succeeded": true, "message"?: "..." }`
   (`common/dto/ApiSuccess.java`). Errores: `{ "error": "<mensaje>", "succeeded": false, "details"?: {campo: mensaje} }`
   (`common/dto/ApiError.java`, `common/error/GlobalExceptionHandler.java`).
-- Excepciones al sobre: `GET /api/navigation/navmesh` (binario), `POST /api/multiset/token` (objeto plano
-  `{token, expiresAt, mapSetCode}`), `GET /api/trips/export` (CSV) y `GET /api/sessions/stream` (SSE).
+- Excepciones al sobre: `GET /api/navigation/navmesh` (binario), `GET /api/trips/export` (CSV) y
+  `GET /api/sessions/stream` (SSE).
 - El admin desenvuelve el sobre automáticamente en `src/services/api.ts` (interceptor de Axios). La app usa
   `unwrapApi()` de `src/services/campus-api.ts`.
 - Listados paginados (`/api/sessions`, `/api/trips`): `PageResponse {content, page, size, totalElements, totalPages}`.
@@ -102,7 +106,7 @@ flowchart LR
   `POST /api/auth/{login,forgot-password,reset-password}`, `POST /api/sessions/ping`, `POST /api/trips`,
   `GET /api/trips/popular`, `GET /api/campus/**`, `GET /api/buildings/**`, `GET /api/rooms/**`, `GET /api/graph/**`,
   `GET /api/settings/**`, `GET /api/navigation/navmesh`, `GET /api/navigation/elevators`,
-  `POST /api/multiset/token`, `GET /api/events/active`. Todo lo demás exige rol `ADMIN`.
+  `POST /api/vps/token`, `GET /api/events/active`. Todo lo demás exige rol `ADMIN`.
 
 ### 5.3 Qué consume cada frontend
 
@@ -112,11 +116,12 @@ flowchart LR
 | `GET /api/settings` (banderas como `enableIndoorARNavigation`, `arOnLimitedDevices`) | ✔ | ✔ (CRUD) |
 | `GET /api/graph/nodes`, `/edges` | ✔ (mapa exterior) | ✔ (CRUD) |
 | `GET /api/navigation/navmesh`, `/elevators` | ✔ | ✔ (publica con `PUT /navmesh`) |
-| `POST /api/multiset/token` | ✔ | |
+| `POST /api/vps/token` (VPS propio, alcance `localize`) | ✔ | |
+| `POST /api/vps/admin-token` (VPS propio, alcance `admin`) | | ✔ |
 | `GET /api/events/active` | ✔ | (CRUD en `/api/events`) |
 | `GET /api/trips/popular` | ✔ | |
 | `POST /api/sessions/ping`, `POST /api/trips` (telemetría) | ✔ | (lee `/api/sessions`, `/api/trips`, `/api/analytics`) |
-| `/api/buildings`, `/api/rooms`, `/api/poi-clips`, `/api/users`, `/api/navigation/{patches,connections,scan-edits,blocks}`, `/api/multiset/{usage,map-meshes}` | | ✔ |
+| `/api/buildings`, `/api/rooms`, `/api/poi-clips`, `/api/users`, `/api/navigation/{patches,connections,scan-edits,blocks}` | | ✔ |
 
 ### 5.4 Código compartido entre admin y app
 
@@ -133,6 +138,27 @@ No hay paquete compartido: son **copias idénticas** que se verifican con `cmp`.
 Además, **`recast-navigation` debe tener la misma versión exacta (0.43.0) en admin y app**: el admin genera el
 navmesh binario y la app lo carga.
 
+### 5.5 VPS propio (`vps-server`)
+
+El backend no hace de proxy: firma tokens cortos y los clientes hablan directo con el VPS. Así las fotos y las mallas
+no pasan por Railway.
+
+- **Tokens:**
+  - `POST /api/vps/token` es público (app, alcance `localize`, 10 min).
+  - `POST /api/vps/admin-token` es solo ADMIN (panel, alcance `admin`, 30 min).
+  - Los dos responden, dentro del sobre, `{token, expiresAt, baseUrl, mapSetId, scope}`.
+  - Son JWT HS256 con `kid` (`iss=ucomap-backend`, `aud=ucomap-vps`). El backend firma con `VPS_TOKEN_KID` +
+    `VPS_TOKEN_SECRET`, y el VPS acepta los pares de `VPS_TOKEN_SECRETS`.
+  - Sin `VPS_BASE_URL` o sin `VPS_TOKEN_SECRET`, las dos rutas responden 503 y la guía con cámara no puede ubicarse.
+- **App:** `UcoVpsProvider`. Primero pide el token y `GET /v1/map-sets/{id}/status`, y luego
+  `POST /v1/localize` (foto + intrínsecos + pista + banda de piso + gravedad). En `npm run dev` pasa por el proxy
+  `/ucovps-api` (variable `UCOVPS_URL`).
+- **Admin:** página `/vps` (`src/services/vpsService.ts`). Sube escaneos por partes, alinea (pares de puntos o ICP),
+  procesa y evalúa builds, publica o hace rollback y prueba fotos. El editor AR carga las mallas del build publicado:
+  vienen con `frame: "rhs"` y su nombre es el del mapa.
+- **El espacio del map set es la referencia de todo:** `Room.arPosition`, navmesh, parches, conexiones, ascensores,
+  bloqueos, `ScanEdit` y `scenePins.json` están en ese espacio.
+
 ## 6. Flujos de datos principales
 
 ### 6.1 Un estudiante va a un salón
@@ -143,7 +169,7 @@ sequenceDiagram
     actor E as Estudiante
     participant A as App
     participant B as Backend
-    participant M as MultiSet
+    participant M as VPS propio
     E->>A: Abre la app
     A->>B: GET /api/campus, GET /api/settings
     A->>B: POST /api/sessions/ping (cada ~2 min)
@@ -153,7 +179,7 @@ sequenceDiagram
     A->>A: Detecta llegada a la puerta (transition-engine.ts)
     alt Teléfono compatible y AR activada
         A->>B: GET /api/navigation/navmesh
-        A->>B: POST /api/multiset/token
+        A->>B: POST /api/vps/token
         A->>M: Localización VPS (imagen + token)
         Note over A: Ruta interior sobre el navmesh (RouteFinder / recast)
     else Sin AR
@@ -171,7 +197,7 @@ sequenceDiagram
     participant P as Admin
     participant B as Backend
     participant D as MongoDB
-    participant M as MultiSet
+    participant V as VPS propio
     U->>P: Inicia sesión
     P->>B: POST /api/auth/login
     B-->>P: JWT (cookie ucomap_token)
@@ -179,9 +205,9 @@ sequenceDiagram
     P->>B: POST/PUT/PATCH/DELETE /api/** (Bearer)
     B->>D: Guarda
     U->>P: Pestaña «Interior AR» del mapa
-    P->>B: GET /api/multiset/map-meshes
-    B->>M: Credencial principal → URLs de las mallas
-    P->>M: Descarga GLB (Draco)
+    P->>B: POST /api/vps/admin-token
+    P->>V: GET /v1/admin/map-sets/{id}/meshes (build publicado)
+    P->>V: Descarga GLB (URLs firmadas)
     P->>P: Genera navmesh en un Web Worker (recast)
     P->>B: PUT /api/navigation/navmesh (binario, máx. 5 MB)
     Note over B: La app lo descarga en la siguiente navegación interior
@@ -199,7 +225,8 @@ sequenceDiagram
 |---|---|---|---|
 | MongoDB Atlas | Backend | Base de datos de producción | `MONGODB_URI` (secreta) |
 | Gmail SMTP | Backend | Correo de restablecer contraseña | `MAIL_USERNAME` / `MAIL_PASSWORD` (contraseña de aplicación, secreta) |
-| MultiSet (`api.multiset.ai`) | Backend, App, Admin | VPS (localización interior), mallas 3D de los escaneos, cuota | `MULTISET_CLIENT_ID` / `MULTISET_CLIENT_SECRET` solo en el backend; la app recibe tokens cortos |
+| VPS propio (`vps-server`) | App, Admin | Localización interior (guía con cámara); mapas, mallas 3D y builds | `VPS_TOKEN_SECRET` (backend) = un par de `VPS_TOKEN_SECRETS` (VPS); `VPS_URL_SIGNING_SECRET` solo en el VPS |
+| Hugging Face, GitHub | VPS propio | Descarga única de pesos (MegaLoc, DISK, LightGlue) con `ucovps models download` | Ninguna |
 | Railway | Backend | Hosting de la API | Cuenta del responsable |
 | Netlify | Admin (y quizá App) | Hosting estático **(por confirmar)** | Cuenta del responsable |
 | Overpass API / OSM API 0.6 | App, Admin | Huellas de edificios y senderos en vivo (`campus-osm.ts`) | Ninguna |
@@ -215,6 +242,11 @@ sequenceDiagram
 3. **Admin** (`uco-map-admin/`): `cp .env.example .env.local` → `npm ci` → `npm run dev` → `http://localhost:5173`.
 4. **App** (`uco-map-app/`): `cp .env.example .env.local` → `npm ci` → `npm run dev` → `https://localhost:5174`
    (certificado autofirmado; en el teléfono usa `https://<IP-de-tu-PC>:5174`).
+5. **VPS propio** (`vps-server/`, opcional): `uv sync` → `uv run ucovps models download`. Luego, con
+   `VPS_TOKEN_SECRETS` y `VPS_URL_SIGNING_SECRET` de desarrollo, `uv run ucovps serve` (`http://127.0.0.1:8090`) y
+   `uv run ucovps worker`. El backend necesita `VPS_BASE_URL`, `VPS_TOKEN_KID` y `VPS_TOKEN_SECRET` con el mismo par.
+   Si tienes el script `local-dev.sh` de la carpeta raíz del equipo, usa `vps`, `vps-worker` y `backend`: ya traen
+   esos valores.
 
 Los README de cada repo explican cada paso en detalle.
 
@@ -226,18 +258,19 @@ Los README de cada repo explican cada paso en detalle.
 | URL del panel admin (enlace del correo) | Backend: `app.password-reset.frontend-url` en `application.properties`. |
 | Orígenes CORS | Backend: `app.cors.allowed-origins=*` (cualquier origen). |
 | Banderas de funcionalidades | Colección `app_settings` (se editan en Admin › Configuración; la app las lee de `/api/settings`). |
-| Map set de MultiSet | Backend: `MULTISET_MAP_SET_CODE` (la app lo recibe junto con el token). |
+| VPS propio | Backend: `VPS_BASE_URL`, `VPS_TOKEN_KID`, `VPS_TOKEN_SECRET`, `VPS_MAP_SET_ID` (por defecto `uco`). VPS: `VPS_TOKEN_SECRETS`, `VPS_CORS_ORIGINS` (origen del admin; la app en desarrollo pasa por su proxy). App: `VITE_UCOVPS_API` (opcional; sin ella usa el `baseUrl` del token) y `UCOVPS_URL` (proxy de `npm run dev`). |
 | Versión de recast-navigation | `0.43.0` exacta en `package.json` de admin y app. |
 
 ## 10. Requisitos de infraestructura
 
 - **Desarrollo:** Node.js 22 (verificado con 22.22.2), npm 10, Java 21 (JDK), Docker (para MongoDB) y Git.
-  Maven no hace falta: el backend trae `mvnw`.
+  Maven no hace falta: el backend trae `mvnw`. Para el VPS propio: uv (instala Python 3.12) y, para procesar builds,
+  GPU CUDA o un Mac con Apple Silicon.
 - **App en teléfono:** HTTPS obligatorio (cámara, GPS, sensores). AR solo en equipos que pasan las reglas de
   `uco-map-app/src/services/ar-device-rules.ts` (Android con WebXR/ARCore o iPhone con iOS 16+, ver
   `uco-map-app/docs/ar-device-capability.md`).
-- **Producción:** MongoDB Atlas, Railway (backend), hosting estático con reescritura SPA (admin), cuenta MultiSet
-  con cuota suficiente, cuenta Gmail con contraseña de aplicación.
+- **Producción:** MongoDB Atlas, Railway (backend), hosting estático con reescritura SPA (admin), cuenta Gmail con
+  contraseña de aplicación y, para el VPS propio, un servidor x86_64 (idealmente con GPU NVIDIA) con dominio y HTTPS.
 
 ## 11. Consideraciones importantes
 
@@ -245,8 +278,11 @@ Los README de cada repo explican cada paso en detalle.
   sincronización de edificios) y la app envía telemetría. Pide un volcado (*dump*) si necesitas datos reales.
 - **`npm run dev` de la app usa por defecto el backend de producción** (el `.env` versionado). Define
   `BACKEND_URL=http://localhost:8080` en `.env.local`.
-- **MultiSet cobra por llamada.** El backend estima la cuota y apaga la guía con cámara al 98 %
-  (`MultiSetUsageService`). No automatices pruebas que llamen al VPS real.
+- **El VPS propio no cobra por consulta, pero consume CPU o GPU.** Sus límites por sesión e IP y su cola protegen el
+  servidor (`429` con `Retry-After`). No automatices pruebas contra el VPS de producción, y prueba cada build (pestaña
+  Probar y en campo) antes de publicarlo: la app lo usa desde la siguiente localización.
+- **El espacio del map set es intocable.** Si un mapa se mueve en la alineación del VPS, los datos AR de esa zona
+  (salones, parches, conexiones, bloqueos) quedan desplazados y hay que regenerar el navmesh.
 - **Cambiar un contrato rompe dos clientes.** Cualquier cambio de ruta, campo o forma de respuesta en el backend debe
   revisarse en `uco-map-admin/src/services` y `uco-map-app/src/services`. Prefiere cambios aditivos.
 - **No hay migraciones de base de datos.** Renombrar un campo de un `@Document` deja los documentos viejos sin ese dato.

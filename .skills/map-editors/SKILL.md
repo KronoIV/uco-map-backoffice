@@ -35,8 +35,9 @@ Pestañas internas:
 ### Visor 3D (`components/poi-editor/MapViewer.tsx`)
 
 - three.js 0.170 + `GLTFLoader` con `DRACOLoader` (decodificadores en `public/draco/`).
-- Las mallas vienen de `GET /api/multiset/map-meshes` (el backend devuelve URLs firmadas; timeout 60 s). La pose de
-  cada mapa se aplica convirtiendo de la convención de MultiSet: rotación `quaternion.set(qx, -qy, -qz, qw)`.
+- Las mallas vienen de `loadEditorMeshes()` (`services/vpsService.ts`): las del build publicado del VPS propio, con
+  URLs firmadas y la pose ya en el espacio del map set (se aplica tal cual en `placeMesh` de `MapViewer.tsx`). Si el
+  VPS no responde o no tiene build publicado, la página muestra el error. Un chip indica el espacio (`spaceId`).
 - Navegación con teclado (`WASD`, `Q`/`E`, flechas; Shift acelera). Los clics toman el punto de la malla.
 
 ### Generación del navmesh
@@ -64,7 +65,7 @@ la app»). Agregar un tipo de POI = nueva entrada en `POI_TYPES` de `poi-catalog
 ## Reglas
 
 - `recast-navigation` debe quedar en `0.43.0` aquí y en la app.
-- Las coordenadas AR (`arPosition`, parches, conexiones, bloqueos) están en el espacio del map set de MultiSet; si el
+- Las coordenadas AR (`arPosition`, parches, conexiones, bloqueos) están en el espacio del map set del VPS propio; si el
   map set cambia, todo esto debe rehacerse.
 - No hagas recálculos pesados en el hilo principal: usa el worker.
 - Verifica a mano: generar, revisar huecos/islas en el visor, publicar en local y abrir la app contra ese backend.

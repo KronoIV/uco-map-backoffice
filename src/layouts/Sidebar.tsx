@@ -22,6 +22,7 @@ import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
+import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
 import { useAuth } from '../context/AuthContext';
 
 const SIDEBAR_EXPANDED = 236;
@@ -31,6 +32,7 @@ const navItems = [
   { label: 'Dashboard', icon: <DashboardRoundedIcon fontSize="small" />, path: '/' },
   { label: 'Mapa', icon: <MapRoundedIcon fontSize="small" />, path: '/map' },
   { label: 'Campus', icon: <ApartmentRoundedIcon fontSize="small" />, path: '/campus' },
+  { label: 'VPS propio', icon: <ViewInArRoundedIcon fontSize="small" />, path: '/vps' },
   { label: 'Eventos', icon: <EventRoundedIcon fontSize="small" />, path: '/events' },
   { label: 'Actividad', icon: <InsightsRoundedIcon fontSize="small" />, path: '/sessions' },
   { label: 'Usuarios', icon: <PeopleRoundedIcon fontSize="small" />, path: '/users' },
