@@ -16,7 +16,7 @@ const routeMap: Record<string, string[]> = {
   '/': ['Dashboard'],
   '/map': ['Mapa'],
   '/campus': ['Campus'],
-  '/vps': ['VPS propio'],
+  '/vps': ['VPS'],
   '/events': ['Eventos'],
   '/settings': ['Configuración'],
   '/sessions': ['Actividad'],
